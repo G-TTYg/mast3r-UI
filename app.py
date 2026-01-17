@@ -370,6 +370,11 @@ def main(args):
 
 if __name__ == '__main__':
     parser = get_args_parser()
+    # Find the action corresponding to --model_name and --weights and set required to False
+    for action in parser._actions:
+        if action.dest == 'model_name' or action.dest == 'weights':
+            action.required = False
+
     args = parser.parse_args()
     set_print_with_timestamp()
     main(args)

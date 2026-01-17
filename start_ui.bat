@@ -2,19 +2,15 @@
 @echo off
 REM MASt3R Enhanced UI - Windows Start Script
 REM ==================================================
-REM Instructions:
-REM 1. Ensure you have installed all dependencies as per the INSTRUCTIONS.md guide.
-REM 2. Place this script in the root directory of the project.
-REM 3. Double-click this script to run the UI.
+REM This script will activate the 'mast3r' Conda environment
+REM and then launch the Gradio user interface.
 REM ==================================================
 
-echo Starting MASt3R Enhanced UI...
-echo.
-echo All configurations, including model and device selection, are now available within the UI.
+echo Activating Conda environment 'mast3r' and starting the UI...
 echo.
 
-REM Launch app.py without any command-line arguments
-python app.py
+REM Activate the conda environment and run the python script.
+CALL conda.bat activate mast3r && python app.py
 
 echo.
 echo The program has exited.
