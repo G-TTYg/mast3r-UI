@@ -12,6 +12,7 @@ import tempfile
 from contextlib import nullcontext
 import functools
 import math
+import shutil
 import trimesh
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -44,8 +45,8 @@ i18n = {
         "device": "Device",
         "model": "Model",
         "retrieval_model_path": "Retrieval Model Path",
-        "retrieval_model_path_placeholder": "Enter path to retrieval .pth file",
-        "retrieval_model_path_info": "Optional. Path to a retrieval model file (.pth) to speed up pair selection. Download instructions are in the README.",
+        "retrieval_model_path_placeholder": "e.g., models/retrieval.pth",
+        "retrieval_model_path_info": "Optional. Provide a path relative to the project directory. See README for download instructions.",
         "custom_model_path": "Custom Model Path",
         "custom_model_path_placeholder": "Enter path to your custom .pth file",
         "none": "None",
@@ -110,8 +111,8 @@ i18n = {
         "device": "设备",
         "model": "模型",
         "retrieval_model_path": "检索模型路径",
-        "retrieval_model_path_placeholder": "请输入检索模型的 .pth 文件路径",
-        "retrieval_model_path_info": "可选。用于加速图像对选择的检索模型 (.pth) 的路径。下载说明请参见 README。",
+        "retrieval_model_path_placeholder": "例如: models/retrieval.pth",
+        "retrieval_model_path_info": "可选。请提供相对于项目目录的路径。下载说明请参见 README。",
         "custom_model_path": "自定义模型路径",
         "custom_model_path_placeholder": "请输入您的自定义 .pth 文件路径",
         "none": "无",
@@ -294,10 +295,24 @@ def main(args):
 
         retrieval_model_path = retrieval_model_path_tb.strip() if retrieval_model_path_tb else None
 
+        # If a retrieval model path is provided, validate it
+        if retrieval_model_path:
+            # If the user provides a directory, append the default model filename
+            if os.path.isdir(retrieval_model_path):
+                retrieval_model_path = os.path.join(retrieval_model_path, "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree.pth")
+
+            # Check if the file exists within the project directory
+            if not os.path.isfile(retrieval_model_path):
+                raise gr.Error(f"Retrieval model not found at '{retrieval_model_path}'. Please ensure the file exists and the path is relative to the project directory.")
+
         chkpt_tag = hash_md5(model_cache["weights_path"])
 
         # Use the persistent temporary directory created at the start of main()
         cache_path = os.path.join(args.tmp_dir, chkpt_tag)
+
+        # Force-clear the cache directory at the start of each run
+        if os.path.exists(cache_path):
+            shutil.rmtree(cache_path)
         os.makedirs(cache_path, exist_ok=True)
 
         recon_fun = functools.partial(get_reconstructed_scene, cache_path, args.gradio_delete_cache, model,
