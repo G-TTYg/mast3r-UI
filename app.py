@@ -28,14 +28,19 @@ torch.backends.cuda.matmul.allow_tf32 = True
 i18n = {
     "en": {
         "title": "MASt3R Enhanced UI",
-        "upload_files": "Upload Image Files",
+        "upload_gallery": "Image Gallery",
         "run": "Run Reconstruction",
         # New Configuration section
         "config_title": "Configuration",
         "device": "Device",
         "model": "Model",
+        "retrieval_model": "Retrieval Model",
+        "retrieval_model_info": "Optional model to accelerate pair selection for large scenes.",
         "custom_model_path": "Custom Model Path",
         "custom_model_path_placeholder": "Enter path to your custom .pth file",
+        "custom_retrieval_model_path": "Custom Retrieval Model Path",
+        "custom_retrieval_model_path_placeholder": "Enter path to your custom retrieval .pth file",
+        "none": "None",
 
         # Parameters
         "optimization_params": "Optimization Parameters",
@@ -76,21 +81,29 @@ i18n = {
         "cam_size_info": "Controls the size of the camera frustums in the 3D view.",
         "tsdf_threshold": "TSDF Threshold",
         "tsdf_threshold_info": "Threshold for TSDF-based surface reconstruction. 0 disables it.",
-        "as_pointcloud": "Display as Point Cloud",
+        "output_format": "Output Format",
+        "output_format_info": "Choose the format of the 3D model output.",
+        "point_cloud": "Point Cloud",
+        "mesh": "Mesh",
         "mask_sky": "Mask Sky",
         "clean_depth": "Clean-up Depth Maps",
         "transparent_cams": "Transparent Cameras",
     },
     "zh": {
         "title": "MASt3R 增强版UI",
-        "upload_files": "上传图像文件",
+        "upload_gallery": "图像画廊",
         "run": "开始重建",
         # New Configuration section
         "config_title": "配置",
         "device": "设备",
         "model": "模型",
+        "retrieval_model": "检索模型",
+        "retrieval_model_info": "可选的模型，用于加速大型场景的图像对选择。",
         "custom_model_path": "自定义模型路径",
         "custom_model_path_placeholder": "请输入您的自定义 .pth 文件路径",
+        "custom_retrieval_model_path": "自定义检索模型路径",
+        "custom_retrieval_model_path_placeholder": "请输入您的自定义检索 .pth 文件路径",
+        "none": "无",
 
         # Parameters
         "optimization_params": "优化参数",
@@ -131,7 +144,10 @@ i18n = {
         "cam_size_info": "控制3D视图中相机视锥的大小。",
         "tsdf_threshold": "TSDF 阈值",
         "tsdf_threshold_info": "用于基于TSDF的表面重建的阈值。设置为0则禁用。",
-        "as_pointcloud": "以点云形式显示",
+        "output_format": "输出格式",
+        "output_format_info": "选择三维模型的输出格式。",
+        "point_cloud": "点云",
+        "mesh": "网格",
         "mask_sky": "遮蔽天空",
         "clean_depth": "清理深度图",
         "transparent_cams": "透明相机",
@@ -177,12 +193,24 @@ def main(args):
         return model
 
     def run_reconstruction(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
-                           as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
+                           output_format_r, mask_sky, clean_depth, transparent_cams, cam_size,
                            scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
-                           model_name_dd, custom_model_path_tb, device_r, progress=gr.Progress()):
+                           model_name_dd, custom_model_path_tb, retrieval_model_name_dd, custom_retrieval_model_path_tb,
+                           device_r, lang, progress=gr.Progress()):
 
         progress(0, desc="Loading model...")
         model = get_model(model_name_dd, custom_model_path_tb, device_r)
+
+        # Extract file paths from the Gallery's output
+        if inputfiles:
+            inputfiles = [f['name'] for f in inputfiles]
+
+        if retrieval_model_name_dd == "custom":
+            retrieval_model_path = custom_retrieval_model_path_tb
+        elif retrieval_model_name_dd == "none":
+            retrieval_model_path = None
+        else:
+            retrieval_model_path = "naver/" + retrieval_model_name_dd
 
         chkpt_tag = hash_md5(model_cache["weights_path"])
 
@@ -191,7 +219,9 @@ def main(args):
         os.makedirs(cache_path, exist_ok=True)
 
         recon_fun = functools.partial(get_reconstructed_scene, cache_path, args.gradio_delete_cache, model,
-                                        args.retrieval_model, device_r, args.silent, args.image_size)
+                                        retrieval_model_path, device_r, args.silent, args.image_size)
+
+        as_pointcloud = (output_format_r == get_text(lang, "point_cloud"))
 
         progress(0.1, desc="Running reconstruction...")
         scene_state, outmodel = recon_fun(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
@@ -217,20 +247,35 @@ def main(args):
                 lang_radio = gr.Radio(["English", "中文"], value="English", label="Language", show_label=False, container=False, scale=0)
 
             with gr.Accordion("Configuration", open=True) as config_accordion:
+                device = gr.Radio(["cpu", "cuda"], value="cpu" if not torch.cuda.is_available() else "cuda", label="Device")
                 with gr.Row():
-                    device = gr.Radio(["cpu", "cuda"], value="cpu" if not torch.cuda.is_available() else "cuda", label="Device")
-                    model_name = gr.Dropdown(["MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric", "custom"], label="Model")
-                    custom_model_path = gr.Textbox(label="Custom Model Path", placeholder="Enter path to your custom .pth file", visible=False)
+                    model_name = gr.Dropdown(["MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric", "custom"], label="Model", scale=1)
+                    retrieval_model_name = gr.Dropdown(["MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree", "custom", "none"], label="Retrieval Model", info="Optional model to accelerate pair selection for large scenes.", scale=1)
+                with gr.Row():
+                    custom_model_path = gr.Textbox(label="Custom Model Path", placeholder="Enter path to your custom .pth file", visible=False, scale=1)
+                    custom_retrieval_model_path = gr.Textbox(label="Custom Retrieval Model Path", placeholder="Enter path to your custom retrieval .pth file", visible=False, scale=1)
 
-                def toggle_custom_model_path(model_name):
-                    return gr.update(visible=model_name == "custom")
+                def toggle_custom_paths(model_name, retrieval_model_name):
+                    return gr.update(visible=model_name == "custom"), gr.update(visible=retrieval_model_name == "custom")
 
-                model_name.change(toggle_custom_model_path, inputs=model_name, outputs=custom_model_path)
+                model_name.change(toggle_custom_paths, inputs=[model_name, retrieval_model_name], outputs=[custom_model_path, custom_retrieval_model_path])
+                retrieval_model_name.change(toggle_custom_paths, inputs=[model_name, retrieval_model_name], outputs=[custom_model_path, custom_retrieval_model_path])
+
+                def update_scenegraph_options(retrieval_model_name, lang):
+                    choices = [
+                        (get_text(lang, "sg_complete"), "complete"),
+                        (get_text(lang, "sg_swin"), "swin"),
+                        (get_text(lang, "sg_logwin"), "logwin"),
+                        (get_text(lang, "sg_oneref"), "oneref")
+                    ]
+                    if retrieval_model_name != "none":
+                        choices.insert(1, (get_text(lang, "sg_retrieval"), "retrieval"))
+                    return gr.update(choices=choices)
 
             with gr.Row():
                 with gr.Column(scale=1):
                     with gr.Group():
-                        inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple")
+                        inputfiles = gr.Gallery(label=get_text("en", "upload_gallery"))
 
                     with gr.Group():
                         with gr.Accordion(get_text("en", "optimization_params"), open=True) as opt_params_accordion:
@@ -244,27 +289,29 @@ def main(args):
                             matching_conf_thr = gr.Slider(label=get_text("en", "matching_conf_thr"), value=0., minimum=0., maximum=30., step=0.1, info=get_text("en", "matching_conf_thr_info"))
                             shared_intrinsics = gr.Checkbox(value=False, label=get_text("en", "shared_intrinsics"), info=get_text("en", "shared_intrinsics_info"))
 
+                    with gr.Group():
                         with gr.Accordion(get_text("en", "scenegraph_params"), open=False) as sg_params_accordion:
                             scenegraph_type = gr.Dropdown(
                                 [("complete: all possible image pairs", "complete"),
                                  ("swin: sliding window", "swin"),
                                  ("logwin: sliding window with long range", "logwin"),
-                                 ("oneref: match one image with all", "oneref")] +
-                                ([("retrieval: connect views based on similarity", "retrieval")] if args.retrieval_model else []),
+                                 ("oneref: match one image with all", "oneref")],
                                 value='complete', label=get_text("en", "scenegraph_type"),
                                 info=get_text("en", "scenegraph_type_info"), interactive=True)
+                            retrieval_model_name.change(update_scenegraph_options, inputs=[retrieval_model_name, lang_state], outputs=scenegraph_type)
                             with gr.Column(visible=False) as graph_opt:
                                 winsize = gr.Slider(label=get_text("en", "scenegraph_window_size"), value=1, minimum=1, maximum=1, step=1)
                                 win_cyclic = gr.Checkbox(value=False, label=get_text("en", "cyclic_sequence"))
                                 refid = gr.Slider(label=get_text("en", "reference_id"), value=0, minimum=0, maximum=0, step=1, visible=False)
 
+                    with gr.Group():
                         with gr.Accordion(get_text("en", "visualization_params"), open=False) as viz_params_accordion:
                             with gr.Row():
                                 min_conf_thr = gr.Slider(label=get_text("en", "min_conf_thr"), value=1.5, minimum=0.0, maximum=10, step=0.1, info=get_text("en", "min_conf_thr_info"))
                                 cam_size = gr.Slider(label=get_text("en", "cam_size"), value=0.2, minimum=0.001, maximum=1.0, step=0.001, info=get_text("en", "cam_size_info"))
                             TSDF_thresh = gr.Slider(label=get_text("en", "tsdf_threshold"), value=0., minimum=0., maximum=1., step=0.01, info=get_text("en", "tsdf_threshold_info"))
+                            output_format = gr.Radio([get_text("en", "point_cloud"), get_text("en", "mesh")], value=get_text("en", "point_cloud"), label=get_text("en", "output_format"), info=get_text("en", "output_format_info"))
                             with gr.Row():
-                                as_pointcloud = gr.Checkbox(value=True, label=get_text("en", "as_pointcloud"))
                                 mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
                                 clean_depth = gr.Checkbox(value=True, label=get_text("en", "clean_depth"))
                                 transparent_cams = gr.Checkbox(value=False, label=get_text("en", "transparent_cams"))
@@ -273,10 +320,10 @@ def main(args):
 
                 with gr.Column(scale=2):
                     with gr.Group():
-                        outmodel = gr.Model3D(label="3D Model Output")
+                        outmodel = gr.Model3D(label="3D Model Output", height=600)
 
             # Language switching logic
-            def update_ui_text(language, sg_type, in_files, cyclic, ref_id):
+            def update_ui_text(language, sg_type, in_files, cyclic, ref_id, retrieval_model_name):
                 # Update scene graph options based on language as well
                 graph_opt_up, winsize_up, win_cyclic_up, refid_up = set_scenegraph_options(in_files, cyclic, ref_id, sg_type)
 
@@ -287,13 +334,13 @@ def main(args):
                     (get_text(language, "sg_logwin"), "logwin"),
                     (get_text(language, "sg_oneref"), "oneref")
                 ]
-                if args.retrieval_model:
+                if retrieval_model_name != "none":
                     scenegraph_type_choices.insert(1, (get_text(language, "sg_retrieval"), "retrieval"))
 
                 return [
                     language,
                     gr.HTML(value=f'<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">{get_text(language, "title")}</h2>'),
-                    gr.File(label=get_text(language, "upload_files")),
+                    gr.Gallery(label=get_text(language, "upload_gallery")),
                     gr.Button(value=get_text(language, "run")),
                     gr.Accordion(label=get_text(language, "optimization_params")),
                     gr.Slider(label=get_text(language, "coarse_lr"), info=get_text(language, "coarse_lr_info")),
@@ -313,14 +360,16 @@ def main(args):
                     gr.Slider(label=get_text(language, "min_conf_thr"), info=get_text(language, "min_conf_thr_info")),
                     gr.Slider(label=get_text(language, "cam_size"), info=get_text(language, "cam_size_info")),
                     gr.Slider(label=get_text(language, "tsdf_threshold"), info=get_text(language, "tsdf_threshold_info")),
-                    gr.Checkbox(label=get_text(language, "as_pointcloud")),
+                    gr.Radio(choices=[get_text(language, "point_cloud"), get_text(language, "mesh")], label=get_text(language, "output_format"), info=get_text(language, "output_format_info")),
                     gr.Checkbox(label=get_text(language, "mask_sky")),
                     gr.Checkbox(label=get_text(language, "clean_depth")),
                     gr.Checkbox(label=get_text(language, "transparent_cams")),
                     gr.Accordion(label=get_text(language, "config_title")),
-                    gr.Radio(label=get_text(language, "device")),
+                    device.update(label=get_text(language, "device")),
                     gr.Dropdown(label=get_text(language, "model")),
+                    gr.Dropdown(label=get_text(language, "retrieval_model"), info=get_text(language, "retrieval_model_info")),
                     gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
+                    gr.Textbox(label=get_text(language, "custom_retrieval_model_path"), placeholder=get_text(language, "custom_retrieval_model_path_placeholder")),
                 ]
 
             # Collect all components that need updating
@@ -328,9 +377,15 @@ def main(args):
                 lang_state, title_html, inputfiles, run_btn,
                 opt_params_accordion, lr1, niter1, lr2, niter2, optim_level, matching_conf_thr, shared_intrinsics,
                 sg_params_accordion, scenegraph_type, winsize, win_cyclic, refid, graph_opt,
-                viz_params_accordion, min_conf_thr, cam_size, TSDF_thresh, as_pointcloud, mask_sky, clean_depth, transparent_cams,
-                config_accordion, device, model_name, custom_model_path
+                viz_params_accordion, min_conf_thr, cam_size, TSDF_thresh, output_format, mask_sky, clean_depth, transparent_cams,
+                config_accordion, device, model_name, retrieval_model_name, custom_model_path, custom_retrieval_model_path
             ]
+
+            def model_from_scene_wrapper(scene, min_conf_thr, output_format_r, mask_sky,
+                                     clean_depth, transparent_cams, cam_size, TSDF_thresh, lang):
+                as_pointcloud = (output_format_r == get_text(lang, "point_cloud"))
+                return model_from_scene_fun(scene, min_conf_thr, as_pointcloud, mask_sky,
+                                            clean_depth, transparent_cams, cam_size, TSDF_thresh)
 
             # Event listeners
             scenegraph_type.change(set_scenegraph_options,
@@ -344,20 +399,21 @@ def main(args):
                               outputs=[graph_opt, winsize, win_cyclic, refid])
             run_btn.click(fn=run_reconstruction,
                           inputs=[scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
-                                  as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
+                                  output_format, mask_sky, clean_depth, transparent_cams, cam_size,
                                   scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
-                                  model_name, custom_model_path, device],
+                                  model_name, custom_model_path, retrieval_model_name, custom_retrieval_model_path,
+                                  device, lang_state],
                           outputs=[scene_state, outmodel])
 
             # Listen to changes in visualization parameters
-            viz_inputs = [scene_state, min_conf_thr, as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh]
-            min_conf_thr.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-            cam_size.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-            TSDF_thresh.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-            as_pointcloud.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-            mask_sky.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-            clean_depth.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-            transparent_cams.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            viz_inputs = [scene_state, min_conf_thr, output_format, mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh, lang_state]
+            min_conf_thr.release(fn=model_from_scene_wrapper, inputs=viz_inputs, outputs=outmodel)
+            cam_size.release(fn=model_from_scene_wrapper, inputs=viz_inputs, outputs=outmodel)
+            TSDF_thresh.release(fn=model_from_scene_wrapper, inputs=viz_inputs, outputs=outmodel)
+            output_format.change(fn=model_from_scene_wrapper, inputs=viz_inputs, outputs=outmodel)
+            mask_sky.change(fn=model_from_scene_wrapper, inputs=viz_inputs, outputs=outmodel)
+            clean_depth.change(fn=model_from_scene_wrapper, inputs=viz_inputs, outputs=outmodel)
+            transparent_cams.change(fn=model_from_scene_wrapper, inputs=viz_inputs, outputs=outmodel)
 
             # Bind the radio button to the update function
             def on_lang_change(language_name):
@@ -366,7 +422,7 @@ def main(args):
 
             lang_radio.change(on_lang_change, inputs=lang_radio, outputs=lang_state, queue=False).then(
                 update_ui_text,
-                inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid],
+                inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid, retrieval_model_name],
                 outputs=ui_components
             )
 
