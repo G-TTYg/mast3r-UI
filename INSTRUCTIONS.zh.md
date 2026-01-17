@@ -17,20 +17,36 @@
 
 ### 1. 环境准备
 
-在运行本项目之前，您需要安装所有必需的 Python 依赖项。
+我们强烈建议使用 Conda 来创建一个独立的 Python 环境，以避免与您系统中的其他库产生冲突。
 
-**强烈建议**在一个独立的 Python 虚拟环境中执行以下操作，以避免与其他项目产生冲突。
+如果您尚未安装 Conda，请先从 [Anaconda 官网](https://www.anaconda.com/products/distribution) 下载并安装。
 
-打开您的终端（在 Windows 上是 `cmd` 或 `PowerShell`），然后执行以下两条命令：
+**步骤如下:**
 
-```bash
-# 安装主要的依赖
-pip install -r requirements.txt
+1.  **创建 Conda 环境**:
+    打开您的终端（在 Windows 上是 `Anaconda Prompt`），然后运行以下命令来创建一个名为 `mast3r` 的新环境。我们推荐使用 Python 3.11。
 
-# 安装 dust3r 模块的依赖
-pip install -r dust3r/requirements.txt
-```
-这将自动安装项目所需的所有库。
+    ```bash
+    conda create -n mast3r python=3.11
+    ```
+
+2.  **激活 Conda 环境**:
+    创建成功后，使用以下命令激活新环境。在后续所有操作前，请确保您已经激活了此环境。
+
+    ```bash
+    conda activate mast3r
+    ```
+
+3.  **安装依赖**:
+    在新环境中，执行以下两条命令来安装所有必需的依赖项。
+
+    ```bash
+    # 安装主要的依赖
+    pip install -r requirements.txt
+
+    # 安装 dust3r 模块的依赖
+    pip install -r dust3r/requirements.txt
+    ```
 
 ---
 
