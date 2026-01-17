@@ -370,10 +370,12 @@ def main(args):
 
 if __name__ == '__main__':
     parser = get_args_parser()
-    # Find the action corresponding to --model_name and --weights and set required to False
-    for action in parser._actions:
-        if action.dest == 'model_name' or action.dest == 'weights':
-            action.required = False
+
+    # Find the mutually exclusive group containing --model_name and --weights and make it not required.
+    for group in parser._mutually_exclusive_groups:
+        if any(action.dest in ['model_name', 'weights'] for action in group._group_actions):
+            group.required = False
+            break
 
     args = parser.parse_args()
     set_print_with_timestamp()
