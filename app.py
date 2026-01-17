@@ -65,6 +65,8 @@ i18n = {
         "optim_level_info": "Controls the depth of the optimization process.",
         "matching_conf_thr": "Matching Confidence Threshold",
         "matching_conf_thr_info": "Confidence threshold for matching points before falling back to 3D regression.",
+        "patch_size": "Patch Size",
+        "patch_size_info": "Size of the patches used for matching. Smaller patches can be faster but less accurate.",
         "shared_intrinsics": "Shared Intrinsics",
         "shared_intrinsics_info": "Assume all cameras share the same intrinsic parameters. Useful for videos shot with a single camera.",
 
@@ -134,6 +136,8 @@ i18n = {
         "optim_level_info": "控制优化的深度和范围。",
         "matching_conf_thr": "匹配置信度阈值",
         "matching_conf_thr_info": "在回退到3D回归前，用于点匹配的置信度阈值。",
+        "patch_size": "区块大小",
+        "patch_size_info": "用于匹配的区块的大小。较小的区块速度更快，但准确性较低。",
         "shared_intrinsics": "共享内参",
         "shared_intrinsics_info": "假设所有相机共享相同的内参。适用于使用单个相机拍摄的视频。",
 
@@ -286,7 +290,7 @@ def main(args):
         return _convert_scene_output(outfile, rgbimg, pts3d, msk, focals, cams2world, as_pointcloud=as_pointcloud,
                                             transparent_cams=transparent_cams, cam_size=cam_size, silent=silent)
 
-    def run_reconstruction(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
+    def run_reconstruction(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr, patch_size_r,
                            model_type_r, file_format_r, mask_sky, clean_depth, transparent_cams, cam_size,
                            scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
                            model_name_dd, custom_model_path_tb, retrieval_model_path_tb,
@@ -333,7 +337,8 @@ def main(args):
         # We pass `None` for the scene_state to start a new reconstruction.
         scene_state, outmodel = recon_fun(None, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
                                           as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
-                                          scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
+                                          scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
+                                          patch_size=patch_size_r)
 
         # Now, if the user requested a non-GLB mesh format, we re-export using our custom function.
         if not as_pointcloud and file_format_r != "GLB":
@@ -460,6 +465,7 @@ def main(args):
                                 niter2 = gr.Slider(label=get_text("en", "fine_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "fine_iter_info"))
                             optim_level = gr.Dropdown(["coarse", "refine", "refine+depth"], value='refine+depth', label=get_text("en", "optim_level"), info=get_text("en", "optim_level_info"))
                             matching_conf_thr = gr.Slider(label=get_text("en", "matching_conf_thr"), value=0., minimum=0., maximum=30., step=0.1, info=get_text("en", "matching_conf_thr_info"))
+                            patch_size = gr.Slider(label=get_text("en", "patch_size"), value=16, minimum=8, maximum=32, step=8, info=get_text("en", "patch_size_info"))
                             shared_intrinsics = gr.Checkbox(value=False, label=get_text("en", "shared_intrinsics"), info=get_text("en", "shared_intrinsics_info"))
 
                     with gr.Group():
@@ -487,10 +493,10 @@ def main(args):
                                 model_type = gr.Radio([get_text("en", "point_cloud"), get_text("en", "mesh")], value=get_text("en", "point_cloud"), label=get_text("en", "model_type"))
                                 file_format = gr.Radio(["GLB", "OBJ", "PLY"], value="GLB", label=get_text("en", "file_format"), visible=False)
 
-                            def toggle_file_format(model_type_choice):
-                                return gr.update(visible=model_type_choice == get_text("en", "mesh"))
+                            def toggle_file_format(model_type_choice, lang):
+                                return gr.update(visible=model_type_choice == get_text(lang, "mesh"))
 
-                            model_type.change(toggle_file_format, inputs=model_type, outputs=file_format)
+                            model_type.change(toggle_file_format, inputs=[model_type, lang_state], outputs=file_format)
 
                             with gr.Row():
                                 mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
@@ -533,6 +539,7 @@ def main(args):
                     gr.update(label=get_text(language, "fine_iter"), info=get_text(language, "fine_iter_info")),
                     gr.update(label=get_text(language, "optim_level"), info=get_text(language, "optim_level_info")),
                     gr.update(label=get_text(language, "matching_conf_thr"), info=get_text(language, "matching_conf_thr_info")),
+                    gr.update(label=get_text(language, "patch_size"), info=get_text(language, "patch_size_info")),
                     gr.update(label=get_text(language, "shared_intrinsics"), info=get_text(language, "shared_intrinsics_info")),
                     gr.update(label=get_text(language, "scenegraph_params")),
                     gr.update(choices=scenegraph_type_choices, label=get_text(language, "scenegraph_type"), info=get_text(language, "scenegraph_type_info")),
@@ -562,7 +569,7 @@ def main(args):
             # Collect all components that need updating
             ui_components = [
                 lang_state, title_html, inputfiles, run_btn,
-                opt_params_accordion, lr1, niter1, lr2, niter2, optim_level, matching_conf_thr, shared_intrinsics,
+                opt_params_accordion, lr1, niter1, lr2, niter2, optim_level, matching_conf_thr, patch_size, shared_intrinsics,
                 sg_params_accordion, scenegraph_type, winsize, win_cyclic, refid, graph_opt,
                 viz_params_accordion, min_conf_thr, cam_size, TSDF_thresh, model_type, file_format, mask_sky, clean_depth, transparent_cams,
                 config_accordion, device, image_size, model_name, custom_model_path, retrieval_model_path
@@ -590,7 +597,7 @@ def main(args):
                               outputs=[graph_opt, winsize, win_cyclic, refid])
 
             run_btn.click(fn=run_reconstruction,
-                          inputs=[scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
+                          inputs=[scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr, patch_size,
                                   model_type, file_format, mask_sky, clean_depth, transparent_cams, cam_size,
                                   scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
                                   model_name, custom_model_path, retrieval_model_path,
