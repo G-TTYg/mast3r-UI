@@ -344,7 +344,7 @@ def get_reconstructed_scene(outdir, gradio_delete_cache, model, retrieval_model,
     return scene_state, outfile
 
 def set_scenegraph_options(inputfiles, win_cyclic, refid, scenegraph_type):
-    num_files = len(inputfiles) if inputfiles is not None else 1
+    num_files = len(inputfiles) if inputfiles is not None else 0
     max_winsize, min_winsize = 1, 1
     win_cyclic_old_val = win_cyclic
 
@@ -354,17 +354,22 @@ def set_scenegraph_options(inputfiles, win_cyclic, refid, scenegraph_type):
     refid = gr.Slider(visible=False)
 
     if scenegraph_type in ["swin", "logwin"]:
-        if scenegraph_type == "swin":
-            if win_cyclic_old_val:
-                max_winsize = max(1, math.ceil((num_files - 1) / 2))
-            else:
-                max_winsize = num_files - 1
-        else:
-            if win_cyclic_old_val:
-                half_size = math.ceil((num_files - 1) / 2)
-                max_winsize = max(1, math.ceil(math.log(half_size, 2)))
-            else:
-                max_winsize = max(1, math.ceil(math.log(num_files, 2)))
+        if num_files > 1:
+            if scenegraph_type == "swin":
+                if win_cyclic_old_val:
+                    max_winsize = max(1, math.ceil((num_files - 1) / 2))
+                else:
+                    max_winsize = num_files - 1
+            else: # logwin
+                if win_cyclic_old_val:
+                    half_size = math.ceil((num_files - 1) / 2)
+                    if half_size > 0:
+                        max_winsize = max(1, math.ceil(math.log(half_size, 2)))
+                else:
+                    if num_files > 0:
+                        max_winsize = max(1, math.ceil(math.log(num_files, 2)))
+
+        max_winsize = max(1, max_winsize)
 
         winsize = gr.Slider(label="Scene Graph: Window Size", value=max_winsize,
                                 minimum=min_winsize, maximum=max_winsize, step=1, visible=True)
@@ -377,15 +382,21 @@ def set_scenegraph_options(inputfiles, win_cyclic, refid, scenegraph_type):
         winsize = gr.Slider(label="Retrieval: Num. key images", value=min(20, num_files),
                                 minimum=0, maximum=num_files, step=1, visible=True)
         win_cyclic = gr.Checkbox(visible=False)
-        refid = gr.Slider(label="Retrieval: Num neighbors", value=min(num_files - 1, 10), minimum=1,
-                              maximum=num_files - 1, step=1, visible=True)
+
+        max_refid = max(1, num_files - 1)
+        refid_val = min(refid if refid is not None else 10, max_refid)
+        refid = gr.Slider(label="Retrieval: Num neighbors", value=refid_val, minimum=1,
+                              maximum=max_refid, step=1, visible=True)
 
     elif scenegraph_type == "oneref":
         graph_opt = gr.Column(visible=True)
         winsize = gr.Slider(visible=False)
         win_cyclic = gr.Checkbox(visible=False)
-        refid = gr.Slider(label="Scene Graph: Id", value=0, minimum=0,
-                              maximum=num_files - 1, step=1, visible=True)
+
+        max_refid = max(0, num_files - 1)
+        refid_val = min(refid if refid is not None else 0, max_refid)
+        refid = gr.Slider(label="Scene Graph: Id", value=refid_val, minimum=0,
+                              maximum=max_refid, step=1, visible=True)
 
     return graph_opt, winsize, win_cyclic, refid
 
@@ -408,7 +419,7 @@ def main(args):
     }
 
     def get_retrieval_model(retrieval_model_name, custom_retrieval_model_path, main_model, device):
-        if retrieval_model_name == get_text(lang_state.value, "retrieval_model_none"):
+        if retrieval_model_name == "none":
             return None
 
         if retrieval_model_name == "custom":
@@ -481,15 +492,15 @@ def main(args):
 
         css = """
         .gradio-container {margin: 0 !important; min-width: 100%}
-        .image-upload .h-full {
-            max-height: 200px;
+        #file_gallery .h-full {
+            height: 250px;
             overflow-y: auto;
         }
         """
         with gr.Blocks(css=css, title="MASt3R Enhanced UI") as demo:
             scene_state = gr.State(None)
             lang_state = gr.State("en")
-            retrieval_model_state = gr.State(get_text("en", "retrieval_model_none"))
+            retrieval_model_state = gr.State("none")
 
             with gr.Row():
                 title_html = gr.HTML('<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">MASt3R Enhanced UI</h2>')
@@ -507,11 +518,13 @@ def main(args):
                 model_name.change(toggle_custom_model_path, inputs=model_name, outputs=custom_model_path)
 
                 retrieval_model_name = gr.Dropdown(
-                    [get_text("en", "retrieval_model_none"),
-                     "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree",
-                     "custom"],
+                    choices=[
+                        (get_text("en", "retrieval_model_none"), "none"),
+                        ("MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree", "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree"),
+                        ("custom", "custom")
+                    ],
                     label=get_text("en", "retrieval_model"),
-                    value=get_text("en", "retrieval_model_none")
+                    value="none"
                 )
                 custom_retrieval_model_path = gr.Textbox(
                     label=get_text("en", "custom_retrieval_model_path"),
@@ -531,7 +544,7 @@ def main(args):
             with gr.Row():
                 with gr.Column(scale=1):
                     with gr.Group():
-                        inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple", file_types=["image"], elem_classes="image-upload")
+                        inputfiles = gr.Gallery(label=get_text("en", "upload_files"), file_types=["image"], elem_id="file_gallery")
 
                     with gr.Group():
                         with gr.Accordion(get_text("en", "optimization_params"), open=True) as opt_params_accordion:
@@ -585,13 +598,19 @@ def main(args):
                     (get_text(language, "sg_logwin"), "logwin"),
                     (get_text(language, "sg_oneref"), "oneref")
                 ]
-                if has_retrieval and retrieval_model_name_val != get_text(language, "retrieval_model_none"):
+                if has_retrieval and retrieval_model_name_val != "none":
                     scenegraph_type_choices.insert(1, (get_text(language, "sg_retrieval"), "retrieval"))
+
+                retrieval_model_choices = [
+                    (get_text(language, "retrieval_model_none"), "none"),
+                    ("MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree", "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree"),
+                    ("custom", "custom")
+                ]
 
                 return [
                     language,
                     gr.HTML(value=f'<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">{get_text(language, "title")}</h2>'),
-                    gr.File(label=get_text(language, "upload_files")),
+                    gr.Gallery(label=get_text(language, "upload_files")),
                     gr.Button(value=get_text(language, "run")),
                     gr.Accordion(label=get_text(language, "optimization_params")),
                     gr.Slider(label=get_text(language, "coarse_lr"), info=get_text(language, "coarse_lr_info")),
@@ -620,11 +639,7 @@ def main(args):
                     gr.Dropdown(label=get_text(language, "model")),
                     gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
                     gr.Dropdown(
-                        choices=[
-                            get_text(language, "retrieval_model_none"),
-                            "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree",
-                            "custom"
-                        ],
+                        choices=retrieval_model_choices,
                         label=get_text(language, "retrieval_model")
                     ),
                     gr.Textbox(

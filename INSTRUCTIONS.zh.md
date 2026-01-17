@@ -54,13 +54,27 @@
 
 本程序需要预训练的模型文件才能运行。
 
+#### a) 主要重建模型
+
 - **自动下载**：
   程序默认会从 Hugging Face Hub 自动下载 `MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric` 模型。首次运行时，请确保您的网络连接畅通，并耐心等待下载完成。
 
 - **手动下载**：
-  如果自动下载速度很慢或失败，您也可以从 `README.md` 文件中找到模型的手动下载链接。下载后，请将模型文件（例如 `MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth`）放置在项目根目录下的 `checkpoints/` 文件夹中（如果文件夹不存在，请手动创建）。
+  如果自动下载速度很慢或失败，您也可以从 `README.md` 文件中找到模型的手动下载链接。下载后，我们建议您将模型文件（例如 `MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth`）放置在项目根目录下的 `checkpoints/` 文件夹中（如果文件夹不存在，请手动创建）。您稍后可以在UI界面中通过选择 "custom" 选项来指定文件的具体路径。
 
-  如果自动下载速度很慢或失败，您也可以从 `README.md` 文件中找到模型的手动下载链接。下载后，我们建议您将模型文件放置在项目根目录下的 `checkpoints/` 文件夹中（如果文件夹不存在，请手动创建）。您稍后可以在UI界面中指定文件的具体路径。
+#### b) 检索模型 (可选, 但在图像超过50张时强烈推荐)
+
+检索模型是一个可选组件，它通过智能地预先筛选哪些图像对需要匹配，从而**极大提升**处理大型场景（如超过50张图）时的重建速度。
+
+- **下载链接**:
+  您必须下载以下**全部两个**文件：
+  - [模型权重 (.pth)](https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree.pth)
+  - [Codebook (.pkl)](https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_codebook.pkl)
+
+- **设置步骤**:
+  1. 在项目根目录（与 `app.py` 文件同级）下创建一个名为 `checkpoints` 的文件夹。
+  2. 将下载的 `.pth` 和 `.pkl` **两个文件都**放入 `checkpoints` 文件夹中。
+  3. 在UI界面的“配置”区域，从“检索模型”下拉菜单中选择 "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree" 即可。如果您将模型放在了其他路径，可以选择 "custom" 并在下方的“自定义检索模型路径”文本框中指定 `.pth` 文件的完整路径。程序会自动在同一目录下寻找 `.pkl` 文件。
 
 ---
 
@@ -93,7 +107,7 @@ python app.py
   这里包含了控制模型优化过程的核心参数，例如粗略对齐和精细对齐的学习率（LR）与迭代次数。调整这些参数会影响重建的速度和精度。
 
 - **场景图参数 (Scene Graph Parameters)**:
-  您可以选择不同的策略来决定如何匹配上传的图像对。`complete`（完整连接）模式会尝试匹配所有可能的图像对，效果最好但最耗时；而 `swin`（滑动窗口）等模式则更适用于有序的图像序列（如视频帧）。
+  您可以选择不同的策略来决定如何匹配上传的图像对。`complete`（完整连接）模式会尝试匹配所有可能的图像对，效果最好但最耗时；而 `swin`（滑动窗口）等模式则更适用于有序的图像序列（如视频帧）；对于大量无序图像，使用 `retrieval`（检索）模式是最高效的选择。
 
 - **可视化参数 (Visualization Parameters)**:
   这些参数控制最终3D模型的可视化效果。您可以调整 `min_conf_thr` 来过滤掉低置信度的点，或调整 `cam_size` 来改变相机视锥在预览中的大小。勾选 `As pointcloud` 可以将结果显示为点云而不是网格。
