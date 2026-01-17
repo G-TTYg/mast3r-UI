@@ -11,10 +11,17 @@ import os
 import tempfile
 from contextlib import nullcontext
 import functools
+import math
+import trimesh
+import numpy as np
+from scipy.spatial.transform import Rotation
 
-from mast3r.demo import get_args_parser, get_reconstructed_scene, get_3D_model_from_scene, set_scenegraph_options, SparseGAState
+from mast3r.demo import get_args_parser, get_reconstructed_scene, get_3D_model_from_scene, SparseGAState
 from mast3r.model import AsymmetricMASt3R
 from mast3r.utils.misc import hash_md5
+from dust3r.utils.device import to_numpy
+from dust3r.viz import add_scene_cam, CAM_COLORS, OPENGL, pts3d_to_trimesh, cat_meshes
+from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
 
 import mast3r.utils.path_to_dust3r  # noqa
 from dust3r.demo import set_print_with_timestamp
@@ -32,14 +39,15 @@ i18n = {
         "run": "Run Reconstruction",
         # New Configuration section
         "config_title": "Configuration",
+        "image_size": "Image Size",
+        "image_size_info": "Size of the smallest side of the images. Recommended: 512 for ViT-L, 384 for ViT-B.",
         "device": "Device",
         "model": "Model",
-        "retrieval_model": "Retrieval Model",
-        "retrieval_model_info": "Optional model to accelerate pair selection for large scenes.",
+        "retrieval_model_path": "Retrieval Model Path",
+        "retrieval_model_path_placeholder": "Enter path to retrieval .pth file",
+        "retrieval_model_path_info": "Optional. Path to a retrieval model file (.pth) to speed up pair selection. Download instructions are in the README.",
         "custom_model_path": "Custom Model Path",
         "custom_model_path_placeholder": "Enter path to your custom .pth file",
-        "custom_retrieval_model_path": "Custom Retrieval Model Path",
-        "custom_retrieval_model_path_placeholder": "Enter path to your custom retrieval .pth file",
         "none": "None",
 
         # Parameters
@@ -85,6 +93,8 @@ i18n = {
         "output_format_info": "Choose the format of the 3D model output.",
         "point_cloud": "Point Cloud",
         "mesh": "Mesh",
+        "mesh_obj": "Mesh (OBJ)",
+        "mesh_ply": "Mesh (PLY)",
         "mask_sky": "Mask Sky",
         "clean_depth": "Clean-up Depth Maps",
         "transparent_cams": "Transparent Cameras",
@@ -95,14 +105,15 @@ i18n = {
         "run": "开始重建",
         # New Configuration section
         "config_title": "配置",
+        "image_size": "图像尺寸",
+        "image_size_info": "图像最小边的尺寸。ViT-L建议使用512，ViT-B建议使用384。",
         "device": "设备",
         "model": "模型",
-        "retrieval_model": "检索模型",
-        "retrieval_model_info": "可选的模型，用于加速大型场景的图像对选择。",
+        "retrieval_model_path": "检索模型路径",
+        "retrieval_model_path_placeholder": "请输入检索模型的 .pth 文件路径",
+        "retrieval_model_path_info": "可选。用于加速图像对选择的检索模型 (.pth) 的路径。下载说明请参见 README。",
         "custom_model_path": "自定义模型路径",
         "custom_model_path_placeholder": "请输入您的自定义 .pth 文件路径",
-        "custom_retrieval_model_path": "自定义检索模型路径",
-        "custom_retrieval_model_path_placeholder": "请输入您的自定义检索 .pth 文件路径",
         "none": "无",
 
         # Parameters
@@ -148,6 +159,8 @@ i18n = {
         "output_format_info": "选择三维模型的输出格式。",
         "point_cloud": "点云",
         "mesh": "网格",
+        "mesh_obj": "网格 (OBJ)",
+        "mesh_ply": "网格 (PLY)",
         "mask_sky": "遮蔽天空",
         "clean_depth": "清理深度图",
         "transparent_cams": "透明相机",
@@ -192,11 +205,85 @@ def main(args):
 
         return model
 
+    def _convert_scene_output(outfile, imgs, pts3d, mask, focals, cams2world, cam_size=0.05,
+                              cam_color=None, as_pointcloud=False,
+                              transparent_cams=False, silent=False):
+        assert len(pts3d) == len(mask) <= len(imgs) <= len(cams2world) == len(focals)
+        pts3d = to_numpy(pts3d)
+        imgs = to_numpy(imgs)
+        focals = to_numpy(focals)
+        cams2world = to_numpy(cams2world)
+
+        scene = trimesh.Scene()
+
+        # full pointcloud
+        if as_pointcloud:
+            pts = np.concatenate([p[m.ravel()] for p, m in zip(pts3d, mask)]).reshape(-1, 3)
+            col = np.concatenate([p[m] for p, m in zip(imgs, mask)]).reshape(-1, 3)
+            valid_msk = np.isfinite(pts.sum(axis=1))
+            pct = trimesh.PointCloud(pts[valid_msk], colors=col[valid_msk])
+            scene.add_geometry(pct)
+        else:
+            meshes = []
+            for i in range(len(imgs)):
+                pts3d_i = pts3d[i].reshape(imgs[i].shape)
+                msk_i = mask[i] & np.isfinite(pts3d_i.sum(axis=-1))
+                meshes.append(pts3d_to_trimesh(imgs[i], pts3d_i, msk_i))
+            mesh = trimesh.Trimesh(**cat_meshes(meshes))
+            scene.add_geometry(mesh)
+
+        # add each camera
+        for i, pose_c2w in enumerate(cams2world):
+            if isinstance(cam_color, list):
+                camera_edge_color = cam_color[i]
+            else:
+                camera_edge_color = cam_color or CAM_COLORS[i % len(CAM_COLORS)]
+            add_scene_cam(scene, pose_c2w, camera_edge_color,
+                          None if transparent_cams else imgs[i], focals[i],
+                          imsize=imgs[i].shape[1::-1], screen_width=cam_size)
+
+        rot = np.eye(4)
+        rot[:3, :3] = Rotation.from_euler('y', np.deg2rad(180)).as_matrix()
+        scene.apply_transform(np.linalg.inv(cams2world[0] @ OPENGL @ rot))
+        if not silent:
+            print('(exporting 3D scene to', outfile, ')')
+
+        # Use file extension to determine export format
+        file_ext = os.path.splitext(outfile)[1].lower()
+        scene.export(file_obj=outfile, file_type=file_ext[1:])
+
+        return outfile
+
+    def get_3D_model_from_scene_custom(scene_state, min_conf_thr, as_pointcloud, mask_sky,
+                                     clean_depth, transparent_cams, cam_size, TSDF_thresh, silent=False):
+        if scene_state is None:
+            return None
+        outfile = scene_state.outfile_name
+        if outfile is None:
+            return None
+
+        # get optimized values from scene
+        scene = scene_state.sparse_ga
+        rgbimg = scene.imgs
+        focals = scene.get_focals().cpu()
+        cams2world = scene.get_im_poses().cpu()
+
+        # 3D pointcloud from depthmap, poses and intrinsics
+        if TSDF_thresh > 0:
+            tsdf = TSDFPostProcess(scene, TSDF_thresh=TSDF_thresh)
+            pts3d, _, confs = to_numpy(tsdf.get_dense_pts3d(clean_depth=clean_depth))
+        else:
+            pts3d, _, confs = to_numpy(scene.get_dense_pts3d(clean_depth=clean_depth))
+        msk = to_numpy([c > min_conf_thr for c in confs])
+
+        return _convert_scene_output(outfile, rgbimg, pts3d, msk, focals, cams2world, as_pointcloud=as_pointcloud,
+                                            transparent_cams=transparent_cams, cam_size=cam_size, silent=silent)
+
     def run_reconstruction(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
                            output_format_r, mask_sky, clean_depth, transparent_cams, cam_size,
                            scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
-                           model_name_dd, custom_model_path_tb, retrieval_model_name_dd, custom_retrieval_model_path_tb,
-                           device_r, lang, progress=gr.Progress()):
+                           model_name_dd, custom_model_path_tb, retrieval_model_path_tb,
+                           device_r, image_size, lang, progress=gr.Progress()):
 
         progress(0, desc="Loading model...")
         model = get_model(model_name_dd, custom_model_path_tb, device_r)
@@ -205,12 +292,7 @@ def main(args):
         if inputfiles:
             inputfiles = [f[0] for f in inputfiles]
 
-        if retrieval_model_name_dd == "custom":
-            retrieval_model_path = custom_retrieval_model_path_tb
-        elif retrieval_model_name_dd == "none":
-            retrieval_model_path = None
-        else:
-            retrieval_model_path = "naver/" + retrieval_model_name_dd
+        retrieval_model_path = retrieval_model_path_tb.strip() if retrieval_model_path_tb else None
 
         chkpt_tag = hash_md5(model_cache["weights_path"])
 
@@ -219,14 +301,21 @@ def main(args):
         os.makedirs(cache_path, exist_ok=True)
 
         recon_fun = functools.partial(get_reconstructed_scene, cache_path, args.gradio_delete_cache, model,
-                                        retrieval_model_path, device_r, args.silent, args.image_size)
-
-        as_pointcloud = (output_format_r == get_text(lang, "point_cloud"))
+                                        retrieval_model_path, device_r, args.silent, image_size)
 
         progress(0.1, desc="Running reconstruction...")
-        scene_state, outmodel = recon_fun(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
-                                          as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
-                                          scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
+
+        # We need to create a new outfile for the new scene
+        scene_state = SparseGAState(should_delete=args.gradio_delete_cache)
+
+        # This will call the original get_reconstructed_scene, which doesn't do the final export
+        scene_state, _ = recon_fun(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
+                                   False, mask_sky, clean_depth, transparent_cams, cam_size, # as_pointcloud is now handled by export
+                                   scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
+
+        outmodel = export_scene_to_file(scene_state, output_format_r, lang, min_conf_thr,
+                                      mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh)
+
         progress(1.0, desc="Done!")
         return scene_state, outmodel
 
@@ -235,7 +324,29 @@ def main(args):
         # Pass this persistent directory to the reconstruction function via args
         args.tmp_dir = tmpdirname
 
-        model_from_scene_fun = functools.partial(get_3D_model_from_scene, args.silent)
+        def export_scene_to_file(scene_state, output_format_r, lang, min_conf_thr,
+                             mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh):
+            if not scene_state:
+                return None
+
+            # Determine file extension and point cloud flag
+            as_pointcloud = False
+            if output_format_r == get_text(lang, "mesh_obj"):
+                ext = ".obj"
+            elif output_format_r == get_text(lang, "mesh_ply"):
+                ext = ".ply"
+            elif output_format_r == get_text(lang, "point_cloud"):
+                ext = ".glb" # Or .ply, but glb is better for point clouds in gradio
+                as_pointcloud = True
+            else:  # Default to GLB mesh
+                ext = ".glb"
+
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=args.tmp_dir) as temp_file:
+                scene_state.outfile_name = temp_file.name
+
+            return get_3D_model_from_scene_custom(scene_state, min_conf_thr, as_pointcloud, mask_sky,
+                                                clean_depth, transparent_cams, cam_size, TSDF_thresh, silent=args.silent)
 
         # Build Gradio UI
         with gr.Blocks(css=".gradio-container {margin: 0 !important; min-width: 100%}", title="MASt3R Enhanced UI") as demo:
@@ -247,30 +358,61 @@ def main(args):
                 lang_radio = gr.Radio(["English", "中文"], value="English", label="Language", show_label=False, container=False, scale=0)
 
             with gr.Accordion("Configuration", open=True) as config_accordion:
-                device = gr.Radio(["cpu", "cuda"], value="cpu" if not torch.cuda.is_available() else "cuda", label="Device")
+                with gr.Row():
+                    device = gr.Radio(["cpu", "cuda"], value="cpu" if not torch.cuda.is_available() else "cuda", label="Device")
+                    image_size = gr.Slider(label="Image Size", info="Size of the smallest side of the images. Recommended: 512 for ViT-L, 384 for ViT-B.", minimum=256, maximum=1024, step=8, value=512)
                 with gr.Row():
                     model_name = gr.Dropdown(["MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric", "custom"], label="Model", scale=1)
-                    retrieval_model_name = gr.Dropdown(["MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree", "custom", "none"], label="Retrieval Model", info="Optional model to accelerate pair selection for large scenes.", scale=1)
-                with gr.Row():
                     custom_model_path = gr.Textbox(label="Custom Model Path", placeholder="Enter path to your custom .pth file", visible=False, scale=1)
-                    custom_retrieval_model_path = gr.Textbox(label="Custom Retrieval Model Path", placeholder="Enter path to your custom retrieval .pth file", visible=False, scale=1)
+                with gr.Row():
+                    retrieval_model_path = gr.Textbox(label="Retrieval Model Path", placeholder="Enter path to retrieval .pth file", info="Optional. Path to a retrieval model file (.pth) to speed up pair selection. Download instructions are in the README.", scale=1)
 
-                def toggle_custom_paths(model_name, retrieval_model_name):
-                    return gr.update(visible=model_name == "custom"), gr.update(visible=retrieval_model_name == "custom")
+                def toggle_custom_path(model_name):
+                    return gr.update(visible=model_name == "custom")
 
-                model_name.change(toggle_custom_paths, inputs=[model_name, retrieval_model_name], outputs=[custom_model_path, custom_retrieval_model_path])
-                retrieval_model_name.change(toggle_custom_paths, inputs=[model_name, retrieval_model_name], outputs=[custom_model_path, custom_retrieval_model_path])
+                model_name.change(toggle_custom_path, inputs=model_name, outputs=custom_model_path)
 
-                def update_scenegraph_options(retrieval_model_name, lang):
+                def update_scenegraph_options(retrieval_path, lang):
                     choices = [
                         (get_text(lang, "sg_complete"), "complete"),
                         (get_text(lang, "sg_swin"), "swin"),
                         (get_text(lang, "sg_logwin"), "logwin"),
                         (get_text(lang, "sg_oneref"), "oneref")
                     ]
-                    if retrieval_model_name != "none":
+                    if retrieval_path and retrieval_path.strip():
                         choices.insert(1, (get_text(lang, "sg_retrieval"), "retrieval"))
                     return gr.update(choices=choices)
+
+            def set_scenegraph_options(inputfiles, win_cyclic, refid, scenegraph_type):
+                num_files = len(inputfiles) if inputfiles else 1
+
+                # Determine visibility based on scenegraph_type
+                show_graph_opt = scenegraph_type in ["swin", "logwin", "oneref", "retrieval"]
+                show_winsize = scenegraph_type in ["swin", "logwin", "retrieval"]
+                show_win_cyclic = scenegraph_type in ["swin", "logwin"]
+                show_refid = scenegraph_type in ["oneref", "retrieval"]
+
+                # Default updates
+                winsize_update = gr.update(visible=show_winsize)
+                win_cyclic_update = gr.update(visible=show_win_cyclic)
+                refid_update = gr.update(visible=show_refid)
+
+                # Dynamic updates for winsize slider
+                if scenegraph_type == "swin":
+                    max_val = max(1, math.ceil((num_files - 1) / 2)) if win_cyclic else num_files - 1
+                    winsize_update = gr.update(value=max_val, minimum=1, maximum=max(1, max_val), step=1, visible=True)
+                elif scenegraph_type == "logwin":
+                    half_size = math.ceil((num_files - 1) / 2)
+                    max_val = max(1, math.ceil(math.log(half_size, 2))) if win_cyclic else max(1, math.ceil(math.log(num_files, 2)))
+                    winsize_update = gr.update(value=max_val, minimum=1, maximum=max(1, max_val), step=1, visible=True)
+                elif scenegraph_type == "retrieval":
+                     winsize_update = gr.update(label="Retrieval: Num. key images", value=min(20, num_files), minimum=0, maximum=num_files, step=1, visible=True)
+                     refid_update = gr.update(label="Retrieval: Num neighbors", value=min(num_files - 1, 10), minimum=1, maximum=max(1, num_files - 1), step=1, visible=True)
+                elif scenegraph_type == "oneref":
+                    refid_update = gr.update(value=0, minimum=0, maximum=max(0, num_files - 1), step=1, visible=True)
+
+                return gr.update(visible=show_graph_opt), winsize_update, win_cyclic_update, refid_update
+
 
             with gr.Row():
                 with gr.Column(scale=1):
@@ -298,7 +440,7 @@ def main(args):
                                  ("oneref: match one image with all", "oneref")],
                                 value='complete', label=get_text("en", "scenegraph_type"),
                                 info=get_text("en", "scenegraph_type_info"), interactive=True)
-                            retrieval_model_name.change(update_scenegraph_options, inputs=[retrieval_model_name, lang_state], outputs=scenegraph_type)
+                            retrieval_model_path.change(update_scenegraph_options, inputs=[retrieval_model_path, lang_state], outputs=scenegraph_type)
                             with gr.Column(visible=False) as graph_opt:
                                 winsize = gr.Slider(label=get_text("en", "scenegraph_window_size"), value=1, minimum=1, maximum=1, step=1)
                                 win_cyclic = gr.Checkbox(value=False, label=get_text("en", "cyclic_sequence"))
@@ -310,7 +452,10 @@ def main(args):
                                 min_conf_thr = gr.Slider(label=get_text("en", "min_conf_thr"), value=1.5, minimum=0.0, maximum=10, step=0.1, info=get_text("en", "min_conf_thr_info"))
                                 cam_size = gr.Slider(label=get_text("en", "cam_size"), value=0.2, minimum=0.001, maximum=1.0, step=0.001, info=get_text("en", "cam_size_info"))
                             TSDF_thresh = gr.Slider(label=get_text("en", "tsdf_threshold"), value=0., minimum=0., maximum=1., step=0.01, info=get_text("en", "tsdf_threshold_info"))
-                            output_format = gr.Radio([get_text("en", "point_cloud"), get_text("en", "mesh")], value=get_text("en", "point_cloud"), label=get_text("en", "output_format"), info=get_text("en", "output_format_info"))
+                            output_format = gr.Radio(
+                                [get_text("en", "point_cloud"), get_text("en", "mesh"), get_text("en", "mesh_obj"), get_text("en", "mesh_ply")],
+                                value=get_text("en", "point_cloud"), label=get_text("en", "output_format"), info=get_text("en", "output_format_info")
+                            )
                             with gr.Row():
                                 mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
                                 clean_depth = gr.Checkbox(value=True, label=get_text("en", "clean_depth"))
@@ -323,7 +468,7 @@ def main(args):
                         outmodel = gr.Model3D(label="3D Model Output", height=600)
 
             # Language switching logic
-            def update_ui_text(language, sg_type, in_files, cyclic, ref_id, retrieval_model_name):
+            def update_ui_text(language, sg_type, in_files, cyclic, ref_id, retrieval_path):
                 # Update scene graph options based on language as well
                 graph_opt_up, winsize_up, win_cyclic_up, refid_up = set_scenegraph_options(in_files, cyclic, ref_id, sg_type)
 
@@ -334,7 +479,7 @@ def main(args):
                     (get_text(language, "sg_logwin"), "logwin"),
                     (get_text(language, "sg_oneref"), "oneref")
                 ]
-                if retrieval_model_name != "none":
+                if retrieval_path and retrieval_path.strip():
                     scenegraph_type_choices.insert(1, (get_text(language, "sg_retrieval"), "retrieval"))
 
                 return [
@@ -360,16 +505,18 @@ def main(args):
                     gr.update(label=get_text(language, "min_conf_thr"), info=get_text(language, "min_conf_thr_info")),
                     gr.update(label=get_text(language, "cam_size"), info=get_text(language, "cam_size_info")),
                     gr.update(label=get_text(language, "tsdf_threshold"), info=get_text(language, "tsdf_threshold_info")),
-                    gr.update(choices=[get_text(language, "point_cloud"), get_text(language, "mesh")], label=get_text(language, "output_format"), info=get_text(language, "output_format_info")),
+                    gr.update(choices=[get_text(language, "point_cloud"), get_text(language, "mesh"), get_text(language, "mesh_obj"), get_text(language, "mesh_ply")], label=get_text(language, "output_format"), info=get_text(language, "output_format_info")),
                     gr.update(label=get_text(language, "mask_sky")),
                     gr.update(label=get_text(language, "clean_depth")),
                     gr.update(label=get_text(language, "transparent_cams")),
                     gr.update(label=get_text(language, "config_title")),
                     gr.update(label=get_text(language, "device")),
+                    gr.update(label=get_text(language, "image_size"), info=get_text(language, "image_size_info")),
                     gr.update(label=get_text(language, "model")),
-                    gr.update(label=get_text(language, "retrieval_model"), info=get_text(language, "retrieval_model_info")),
                     gr.update(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
-                    gr.update(label=get_text(language, "custom_retrieval_model_path"), placeholder=get_text(language, "custom_retrieval_model_path_placeholder")),
+                    gr.update(label=get_text(language, "retrieval_model_path"),
+                              placeholder=get_text(language, "retrieval_model_path_placeholder"),
+                              info=get_text(language, "retrieval_model_path_info")),
                 ]
 
             # Collect all components that need updating
@@ -378,14 +525,17 @@ def main(args):
                 opt_params_accordion, lr1, niter1, lr2, niter2, optim_level, matching_conf_thr, shared_intrinsics,
                 sg_params_accordion, scenegraph_type, winsize, win_cyclic, refid, graph_opt,
                 viz_params_accordion, min_conf_thr, cam_size, TSDF_thresh, output_format, mask_sky, clean_depth, transparent_cams,
-                config_accordion, device, model_name, retrieval_model_name, custom_model_path, custom_retrieval_model_path
+                config_accordion, device, image_size, model_name, custom_model_path, retrieval_model_path
             ]
 
             def model_from_scene_wrapper(scene, min_conf_thr, output_format_r, mask_sky,
                                      clean_depth, transparent_cams, cam_size, TSDF_thresh, lang):
-                as_pointcloud = (output_format_r == get_text(lang, "point_cloud"))
-                return model_from_scene_fun(scene, min_conf_thr, as_pointcloud, mask_sky,
-                                            clean_depth, transparent_cams, cam_size, TSDF_thresh)
+
+                # We need to regenerate the file if the format changes
+                if scene:
+                    return export_scene_to_file(scene, output_format_r, lang, min_conf_thr,
+                                                mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh)
+                return None
 
             # Event listeners
             scenegraph_type.change(set_scenegraph_options,
@@ -397,12 +547,13 @@ def main(args):
             win_cyclic.change(set_scenegraph_options,
                               inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
                               outputs=[graph_opt, winsize, win_cyclic, refid])
+
             run_btn.click(fn=run_reconstruction,
                           inputs=[scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
                                   output_format, mask_sky, clean_depth, transparent_cams, cam_size,
                                   scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
-                                  model_name, custom_model_path, retrieval_model_name, custom_retrieval_model_path,
-                                  device, lang_state],
+                                  model_name, custom_model_path, retrieval_model_path,
+                                  device, image_size, lang_state],
                           outputs=[scene_state, outmodel])
 
             # Listen to changes in visualization parameters
@@ -422,7 +573,7 @@ def main(args):
 
             lang_radio.change(on_lang_change, inputs=lang_radio, outputs=lang_state, queue=False).then(
                 update_ui_text,
-                inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid, retrieval_model_name],
+                inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid, retrieval_model_path],
                 outputs=ui_components
             )
 
