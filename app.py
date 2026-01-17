@@ -203,7 +203,7 @@ def main(args):
 
         # Extract file paths from the Gallery's output
         if inputfiles:
-            inputfiles = [f['name'] for f in inputfiles]
+            inputfiles = [f[0] for f in inputfiles]
 
         if retrieval_model_name_dd == "custom":
             retrieval_model_path = custom_retrieval_model_path_tb
@@ -339,37 +339,37 @@ def main(args):
 
                 return [
                     language,
-                    gr.HTML(value=f'<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">{get_text(language, "title")}</h2>'),
-                    gr.Gallery(label=get_text(language, "upload_gallery")),
-                    gr.Button(value=get_text(language, "run")),
-                    gr.Accordion(label=get_text(language, "optimization_params")),
-                    gr.Slider(label=get_text(language, "coarse_lr"), info=get_text(language, "coarse_lr_info")),
-                    gr.Slider(label=get_text(language, "coarse_iter"), info=get_text(language, "coarse_iter_info")),
-                    gr.Slider(label=get_text(language, "fine_lr"), info=get_text(language, "fine_lr_info")),
-                    gr.Slider(label=get_text(language, "fine_iter"), info=get_text(language, "fine_iter_info")),
-                    gr.Dropdown(label=get_text(language, "optim_level"), info=get_text(language, "optim_level_info")),
-                    gr.Slider(label=get_text(language, "matching_conf_thr"), info=get_text(language, "matching_conf_thr_info")),
-                    gr.Checkbox(label=get_text(language, "shared_intrinsics"), info=get_text(language, "shared_intrinsics_info")),
-                    gr.Accordion(label=get_text(language, "scenegraph_params")),
-                    gr.Dropdown(choices=scenegraph_type_choices, label=get_text(language, "scenegraph_type"), info=get_text(language, "scenegraph_type_info")),
+                    gr.update(value=f'<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">{get_text(language, "title")}</h2>'),
+                    gr.update(label=get_text(language, "upload_gallery")),
+                    gr.update(value=get_text(language, "run")),
+                    gr.update(label=get_text(language, "optimization_params")),
+                    gr.update(label=get_text(language, "coarse_lr"), info=get_text(language, "coarse_lr_info")),
+                    gr.update(label=get_text(language, "coarse_iter"), info=get_text(language, "coarse_iter_info")),
+                    gr.update(label=get_text(language, "fine_lr"), info=get_text(language, "fine_lr_info")),
+                    gr.update(label=get_text(language, "fine_iter"), info=get_text(language, "fine_iter_info")),
+                    gr.update(label=get_text(language, "optim_level"), info=get_text(language, "optim_level_info")),
+                    gr.update(label=get_text(language, "matching_conf_thr"), info=get_text(language, "matching_conf_thr_info")),
+                    gr.update(label=get_text(language, "shared_intrinsics"), info=get_text(language, "shared_intrinsics_info")),
+                    gr.update(label=get_text(language, "scenegraph_params")),
+                    gr.update(choices=scenegraph_type_choices, label=get_text(language, "scenegraph_type"), info=get_text(language, "scenegraph_type_info")),
                     winsize_up,
-                    gr.Checkbox(label=get_text(language, "cyclic_sequence")),
+                    gr.update(label=get_text(language, "cyclic_sequence")),
                     refid_up,
                     graph_opt_up,
-                    gr.Accordion(label=get_text(language, "visualization_params")),
-                    gr.Slider(label=get_text(language, "min_conf_thr"), info=get_text(language, "min_conf_thr_info")),
-                    gr.Slider(label=get_text(language, "cam_size"), info=get_text(language, "cam_size_info")),
-                    gr.Slider(label=get_text(language, "tsdf_threshold"), info=get_text(language, "tsdf_threshold_info")),
-                    gr.Radio(choices=[get_text(language, "point_cloud"), get_text(language, "mesh")], label=get_text(language, "output_format"), info=get_text(language, "output_format_info")),
-                    gr.Checkbox(label=get_text(language, "mask_sky")),
-                    gr.Checkbox(label=get_text(language, "clean_depth")),
-                    gr.Checkbox(label=get_text(language, "transparent_cams")),
-                    gr.Accordion(label=get_text(language, "config_title")),
-                    device.update(label=get_text(language, "device")),
-                    gr.Dropdown(label=get_text(language, "model")),
-                    gr.Dropdown(label=get_text(language, "retrieval_model"), info=get_text(language, "retrieval_model_info")),
-                    gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
-                    gr.Textbox(label=get_text(language, "custom_retrieval_model_path"), placeholder=get_text(language, "custom_retrieval_model_path_placeholder")),
+                    gr.update(label=get_text(language, "visualization_params")),
+                    gr.update(label=get_text(language, "min_conf_thr"), info=get_text(language, "min_conf_thr_info")),
+                    gr.update(label=get_text(language, "cam_size"), info=get_text(language, "cam_size_info")),
+                    gr.update(label=get_text(language, "tsdf_threshold"), info=get_text(language, "tsdf_threshold_info")),
+                    gr.update(choices=[get_text(language, "point_cloud"), get_text(language, "mesh")], label=get_text(language, "output_format"), info=get_text(language, "output_format_info")),
+                    gr.update(label=get_text(language, "mask_sky")),
+                    gr.update(label=get_text(language, "clean_depth")),
+                    gr.update(label=get_text(language, "transparent_cams")),
+                    gr.update(label=get_text(language, "config_title")),
+                    gr.update(label=get_text(language, "device")),
+                    gr.update(label=get_text(language, "model")),
+                    gr.update(label=get_text(language, "retrieval_model"), info=get_text(language, "retrieval_model_info")),
+                    gr.update(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
+                    gr.update(label=get_text(language, "custom_retrieval_model_path"), placeholder=get_text(language, "custom_retrieval_model_path_placeholder")),
                 ]
 
             # Collect all components that need updating
