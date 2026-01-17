@@ -479,7 +479,14 @@ def main(args):
 
         model_from_scene_fun = functools.partial(get_3D_model_from_scene, args.silent)
 
-        with gr.Blocks(css=".gradio-container {margin: 0 !important; min-width: 100%}", title="MASt3R Enhanced UI") as demo:
+        css = """
+        .gradio-container {margin: 0 !important; min-width: 100%}
+        .image-upload .h-full {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        """
+        with gr.Blocks(css=css, title="MASt3R Enhanced UI") as demo:
             scene_state = gr.State(None)
             lang_state = gr.State("en")
             retrieval_model_state = gr.State(get_text("en", "retrieval_model_none"))
@@ -524,8 +531,7 @@ def main(args):
             with gr.Row():
                 with gr.Column(scale=1):
                     with gr.Group():
-                        inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple")
-                        file_list_display = gr.Textbox(label="Uploaded Files", interactive=False, lines=5, visible=False)
+                        inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple", file_types=["image"], elem_classes="image-upload")
 
                     with gr.Group():
                         with gr.Accordion(get_text("en", "optimization_params"), open=True) as opt_params_accordion:
@@ -562,20 +568,13 @@ def main(args):
                                 mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
                                 clean_depth = gr.Checkbox(value=True, label=get_text("en", "clean_depth"))
                                 transparent_cams = gr.Checkbox(value=False, label=get_text("en", "transparent_cams"))
-                        export_format = gr.Dropdown([".glb", ".obj"], value=".glb", label="Export Format")
+                        export_format = gr.Dropdown([".glb", ".obj", ".ply", ".stl"], value=".glb", label="Export Format")
 
                     run_btn = gr.Button(get_text("en", "run"), variant="primary")
 
                 with gr.Column(scale=2):
                     with gr.Group():
                         outmodel = gr.Model3D(label="3D Model Output")
-
-            def update_file_list(files):
-                if not files:
-                    return gr.update(value="", visible=False)
-
-                filenames = [os.path.basename(f.name) for f in files]
-                return gr.update(value="\n".join(filenames), visible=True)
 
             def update_ui_text(language, sg_type, in_files, cyclic, ref_id, retrieval_model_name_val):
                 graph_opt_up, winsize_up, win_cyclic_up, refid_up = set_scenegraph_options(in_files, cyclic, ref_id, sg_type)
@@ -620,7 +619,6 @@ def main(args):
                     gr.Radio(label=get_text(language, "device")),
                     gr.Dropdown(label=get_text(language, "model")),
                     gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
-                    gr.Textbox(label=get_text(language, "uploaded_files")),
                     gr.Dropdown(
                         choices=[
                             get_text(language, "retrieval_model_none"),
@@ -640,11 +638,10 @@ def main(args):
                 opt_params_accordion, lr1, niter1, lr2, niter2, optim_level, matching_conf_thr, shared_intrinsics,
                 sg_params_accordion, scenegraph_type, winsize, win_cyclic, refid, graph_opt,
                 viz_params_accordion, min_conf_thr, cam_size, TSDF_thresh, as_pointcloud, mask_sky, clean_depth, transparent_cams,
-                config_accordion, device, model_name, custom_model_path, file_list_display,
+                config_accordion, device, model_name, custom_model_path,
                 retrieval_model_name, custom_retrieval_model_path
             ]
 
-            inputfiles.change(update_file_list, inputs=inputfiles, outputs=file_list_display)
             scenegraph_type.change(set_scenegraph_options,
                                    inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
                                    outputs=[graph_opt, winsize, win_cyclic, refid])
