@@ -305,16 +305,19 @@ def main(args):
 
         progress(0.1, desc="Running reconstruction...")
 
-        # We need to create a new outfile for the new scene
-        scene_state = SparseGAState(should_delete=args.gradio_delete_cache)
+        # Determine if the output should be a point cloud for the initial reconstruction
+        as_pointcloud_initial = (output_format_r == get_text(lang, "point_cloud"))
 
-        # This will call the original get_reconstructed_scene, which doesn't do the final export
-        scene_state, _ = recon_fun(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
-                                   False, mask_sky, clean_depth, transparent_cams, cam_size, # as_pointcloud is now handled by export
-                                   scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
+        # The original function performs a full reconstruction and saves a GLB file.
+        # We pass `None` for the scene_state to start a new reconstruction.
+        scene_state, outmodel = recon_fun(None, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
+                                          as_pointcloud_initial, mask_sky, clean_depth, transparent_cams, cam_size,
+                                          scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
 
-        outmodel = export_scene_to_file(scene_state, output_format_r, lang, min_conf_thr,
-                                      mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh)
+        # Now, if the user requested a non-GLB format, we re-export using our custom function.
+        if output_format_r in [get_text(lang, "mesh_obj"), get_text(lang, "mesh_ply")]:
+            outmodel = export_scene_to_file(scene_state, output_format_r, lang, min_conf_thr,
+                                          mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh)
 
         progress(1.0, desc="Done!")
         return scene_state, outmodel
