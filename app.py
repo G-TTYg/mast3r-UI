@@ -186,24 +186,29 @@ def main(args):
 
         chkpt_tag = hash_md5(model_cache["weights_path"])
 
-        with tempfile.TemporaryDirectory(suffix='_mast3r_gradio_demo') as tmpdirname:
-            cache_path = os.path.join(tmpdirname, chkpt_tag)
-            os.makedirs(cache_path, exist_ok=True)
+        # Use the persistent temporary directory created at the start of main()
+        cache_path = os.path.join(args.tmp_dir, chkpt_tag)
+        os.makedirs(cache_path, exist_ok=True)
 
-            recon_fun = functools.partial(get_reconstructed_scene, cache_path, args.gradio_delete_cache, model,
-                                          args.retrieval_model, device_r, args.silent, args.image_size)
+        recon_fun = functools.partial(get_reconstructed_scene, cache_path, args.gradio_delete_cache, model,
+                                        args.retrieval_model, device_r, args.silent, args.image_size)
 
-            progress(0.1, desc="Running reconstruction...")
+        progress(0.1, desc="Running reconstruction...")
             scene_state, outmodel = recon_fun(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
                                               as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
                                               scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
             progress(1.0, desc="Done!")
             return scene_state, outmodel
 
-    model_from_scene_fun = functools.partial(get_3D_model_from_scene, args.silent)
+    # Create a persistent temporary directory for the duration of the app
+    with tempfile.TemporaryDirectory(suffix='_mast3r_gradio_persistent_cache') as tmpdirname:
+        # Pass this persistent directory to the reconstruction function via args
+        args.tmp_dir = tmpdirname
 
-    # Build Gradio UI
-    with gr.Blocks(css=".gradio-container {margin: 0 !important; min-width: 100%}", title="MASt3R Enhanced UI") as demo:
+        model_from_scene_fun = functools.partial(get_3D_model_from_scene, args.silent)
+
+        # Build Gradio UI
+        with gr.Blocks(css=".gradio-container {margin: 0 !important; min-width: 100%}", title="MASt3R Enhanced UI") as demo:
         scene_state = gr.State(None)
         lang_state = gr.State("en") # Default language
 
