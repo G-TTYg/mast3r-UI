@@ -60,23 +60,18 @@ This application requires a pre-trained model file to run.
 - **Manual Download**:
   If the automatic download is slow or fails, you can find manual download links for the model in the `README.md` file. After downloading, place the model file (e.g., `MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth`) into a `checkpoints/` folder in the project's root directory (create the folder if it doesn't exist).
 
-  After downloading manually, you will need to modify the launch command to use the `--weights` argument to specify the local model path, for example:
-  `python app.py --weights checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth`
+  If the automatic download is slow or fails, you can find manual download links for the model in the `README.md` file. After downloading, we recommend placing the model file into a `checkpoints/` folder in the project's root directory (create the folder if it doesn't exist). You will be able to specify the exact path to this file within the UI later.
 
 ---
 
 ### 3. Launching the UI
 
-Once the environment and model are ready, you can launch the UI.
+Once the environment setup is complete, you can launch the UI.
 
-In your terminal, execute one of the following commands:
+In your terminal, execute the following command:
 
 ```bash
-# If you have an NVIDIA GPU with correctly installed CUDA drivers
-python app.py --model_name MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric
-
-# If you do not have an NVIDIA GPU, or if you want to run on the CPU (this will be much slower)
-python app.py --model_name MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric --device cpu
+python app.py
 ```
 
 Upon successful launch, you will see output in your terminal similar to this:

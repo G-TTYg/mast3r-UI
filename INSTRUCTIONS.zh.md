@@ -60,23 +60,18 @@
 - **手动下载**：
   如果自动下载速度很慢或失败，您也可以从 `README.md` 文件中找到模型的手动下载链接。下载后，请将模型文件（例如 `MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth`）放置在项目根目录下的 `checkpoints/` 文件夹中（如果文件夹不存在，请手动创建）。
 
-  手动下载后，您需要修改启动命令，使用 `--weights` 参数来指定本地模型文件的路径，例如：
-  `python app.py --weights checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth`
+  如果自动下载速度很慢或失败，您也可以从 `README.md` 文件中找到模型的手动下载链接。下载后，我们建议您将模型文件放置在项目根目录下的 `checkpoints/` 文件夹中（如果文件夹不存在，请手动创建）。您稍后可以在UI界面中指定文件的具体路径。
 
 ---
 
 ### 3. 启动UI界面
 
-完成环境和模型的准备后，您就可以启动UI界面了。
+完成环境准备后，您就可以启动UI界面了。
 
 在终端中，执行以下命令：
 
 ```bash
-# 如果您有NVIDIA显卡并已正确安装CUDA驱动
-python app.py --model_name MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric
-
-# 如果您没有NVIDIA显卡，或者希望使用CPU运行（速度会慢很多）
-python app.py --model_name MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric --device cpu
+python app.py
 ```
 
 成功启动后，您会在终端看到类似以下的输出：

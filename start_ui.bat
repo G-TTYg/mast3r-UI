@@ -10,16 +10,11 @@ REM ==================================================
 
 echo Starting MASt3R Enhanced UI...
 echo.
-echo Defaulting to CPU mode for maximum compatibility.
-echo If you have a compatible NVIDIA GPU and want to use it,
-echo please edit this script and remove the "--device cpu" argument.
+echo All configurations, including model and device selection, are now available within the UI.
 echo.
 
-REM Set the default model name
-set MODEL_NAME=MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric
-
-REM Launch app.py. Defaulting to CPU for broader compatibility.
-python app.py --model_name %MODEL_NAME% --device cpu
+REM Launch app.py without any command-line arguments
+python app.py
 
 echo.
 echo The program has exited.
