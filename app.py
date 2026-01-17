@@ -157,58 +157,59 @@ def main(args):
         # Build Gradio UI
         with gr.Blocks(css=".gradio-container {margin: 0 !important; min-width: 100%}", title="MASt3R Enhanced UI") as demo:
             scene_state = gr.State(None)
-            lang = gr.State("en") # Default language
+            lang_state = gr.State("en") # Default language
 
             with gr.Row():
-                lang_btn_en = gr.Button("English")
-                lang_btn_zh = gr.Button("中文")
-
-            gr.HTML('<h2 id="title" style="text-align: center;">MASt3R Enhanced UI</h2>')
+                title_html = gr.HTML('<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">MASt3R Enhanced UI</h2>')
+                lang_radio = gr.Radio(["English", "中文"], value="English", label="Language", show_label=False, container=False, scale=0)
 
             with gr.Row():
                 with gr.Column(scale=1):
-                    inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple")
+                    with gr.Box():
+                        inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple")
 
-                    with gr.Accordion(get_text("en", "optimization_params"), open=True) as opt_params_accordion:
-                        with gr.Row():
-                            lr1 = gr.Slider(label=get_text("en", "coarse_lr"), value=0.07, minimum=0.01, maximum=0.2, step=0.01, info=get_text("en", "coarse_lr_info"))
-                            niter1 = gr.Slider(label=get_text("en", "coarse_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "coarse_iter_info"))
-                        with gr.Row():
-                            lr2 = gr.Slider(label=get_text("en", "fine_lr"), value=0.01, minimum=0.005, maximum=0.05, step=0.001, info=get_text("en", "fine_lr_info"))
-                            niter2 = gr.Slider(label=get_text("en", "fine_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "fine_iter_info"))
-                        optim_level = gr.Dropdown(["coarse", "refine", "refine+depth"], value='refine+depth', label=get_text("en", "optim_level"), info=get_text("en", "optim_level_info"))
-                        matching_conf_thr = gr.Slider(label=get_text("en", "matching_conf_thr"), value=0., minimum=0., maximum=30., step=0.1, info=get_text("en", "matching_conf_thr_info"))
-                        shared_intrinsics = gr.Checkbox(value=False, label=get_text("en", "shared_intrinsics"), info=get_text("en", "shared_intrinsics_info"))
+                    with gr.Box():
+                        with gr.Accordion(get_text("en", "optimization_params"), open=True) as opt_params_accordion:
+                            with gr.Row():
+                                lr1 = gr.Slider(label=get_text("en", "coarse_lr"), value=0.07, minimum=0.01, maximum=0.2, step=0.01, info=get_text("en", "coarse_lr_info"))
+                                niter1 = gr.Slider(label=get_text("en", "coarse_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "coarse_iter_info"))
+                            with gr.Row():
+                                lr2 = gr.Slider(label=get_text("en", "fine_lr"), value=0.01, minimum=0.005, maximum=0.05, step=0.001, info=get_text("en", "fine_lr_info"))
+                                niter2 = gr.Slider(label=get_text("en", "fine_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "fine_iter_info"))
+                            optim_level = gr.Dropdown(["coarse", "refine", "refine+depth"], value='refine+depth', label=get_text("en", "optim_level"), info=get_text("en", "optim_level_info"))
+                            matching_conf_thr = gr.Slider(label=get_text("en", "matching_conf_thr"), value=0., minimum=0., maximum=30., step=0.1, info=get_text("en", "matching_conf_thr_info"))
+                            shared_intrinsics = gr.Checkbox(value=False, label=get_text("en", "shared_intrinsics"), info=get_text("en", "shared_intrinsics_info"))
 
-                    with gr.Accordion(get_text("en", "scenegraph_params"), open=False) as sg_params_accordion:
-                        scenegraph_type = gr.Dropdown(
-                            [("complete: all possible image pairs", "complete"),
-                             ("swin: sliding window", "swin"),
-                             ("logwin: sliding window with long range", "logwin"),
-                             ("oneref: match one image with all", "oneref")] +
-                            ([("retrieval: connect views based on similarity", "retrieval")] if args.retrieval_model else []),
-                            value='complete', label=get_text("en", "scenegraph_type"),
-                            info=get_text("en", "scenegraph_type_info"), interactive=True)
-                        with gr.Column(visible=False) as graph_opt:
-                            winsize = gr.Slider(label=get_text("en", "scenegraph_window_size"), value=1, minimum=1, maximum=1, step=1)
-                            win_cyclic = gr.Checkbox(value=False, label=get_text("en", "cyclic_sequence"))
-                            refid = gr.Slider(label=get_text("en", "reference_id"), value=0, minimum=0, maximum=0, step=1, visible=False)
+                        with gr.Accordion(get_text("en", "scenegraph_params"), open=False) as sg_params_accordion:
+                            scenegraph_type = gr.Dropdown(
+                                [("complete: all possible image pairs", "complete"),
+                                 ("swin: sliding window", "swin"),
+                                 ("logwin: sliding window with long range", "logwin"),
+                                 ("oneref: match one image with all", "oneref")] +
+                                ([("retrieval: connect views based on similarity", "retrieval")] if args.retrieval_model else []),
+                                value='complete', label=get_text("en", "scenegraph_type"),
+                                info=get_text("en", "scenegraph_type_info"), interactive=True)
+                            with gr.Column(visible=False) as graph_opt:
+                                winsize = gr.Slider(label=get_text("en", "scenegraph_window_size"), value=1, minimum=1, maximum=1, step=1)
+                                win_cyclic = gr.Checkbox(value=False, label=get_text("en", "cyclic_sequence"))
+                                refid = gr.Slider(label=get_text("en", "reference_id"), value=0, minimum=0, maximum=0, step=1, visible=False)
 
-                    with gr.Accordion(get_text("en", "visualization_params"), open=False) as viz_params_accordion:
-                        with gr.Row():
-                            min_conf_thr = gr.Slider(label=get_text("en", "min_conf_thr"), value=1.5, minimum=0.0, maximum=10, step=0.1, info=get_text("en", "min_conf_thr_info"))
-                            cam_size = gr.Slider(label=get_text("en", "cam_size"), value=0.2, minimum=0.001, maximum=1.0, step=0.001, info=get_text("en", "cam_size_info"))
-                        TSDF_thresh = gr.Slider(label=get_text("en", "tsdf_threshold"), value=0., minimum=0., maximum=1., step=0.01, info=get_text("en", "tsdf_threshold_info"))
-                        with gr.Row():
-                            as_pointcloud = gr.Checkbox(value=True, label=get_text("en", "as_pointcloud"))
-                            mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
-                            clean_depth = gr.Checkbox(value=True, label=get_text("en", "clean_depth"))
-                            transparent_cams = gr.Checkbox(value=False, label=get_text("en", "transparent_cams"))
+                        with gr.Accordion(get_text("en", "visualization_params"), open=False) as viz_params_accordion:
+                            with gr.Row():
+                                min_conf_thr = gr.Slider(label=get_text("en", "min_conf_thr"), value=1.5, minimum=0.0, maximum=10, step=0.1, info=get_text("en", "min_conf_thr_info"))
+                                cam_size = gr.Slider(label=get_text("en", "cam_size"), value=0.2, minimum=0.001, maximum=1.0, step=0.001, info=get_text("en", "cam_size_info"))
+                            TSDF_thresh = gr.Slider(label=get_text("en", "tsdf_threshold"), value=0., minimum=0., maximum=1., step=0.01, info=get_text("en", "tsdf_threshold_info"))
+                            with gr.Row():
+                                as_pointcloud = gr.Checkbox(value=True, label=get_text("en", "as_pointcloud"))
+                                mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
+                                clean_depth = gr.Checkbox(value=True, label=get_text("en", "clean_depth"))
+                                transparent_cams = gr.Checkbox(value=False, label=get_text("en", "transparent_cams"))
 
                     run_btn = gr.Button(get_text("en", "run"), variant="primary")
 
                 with gr.Column(scale=2):
-                    outmodel = gr.Model3D()
+                    with gr.Box():
+                        outmodel = gr.Model3D(label="3D Model Output")
 
             # Language switching logic
             def update_ui_text(language, sg_type, in_files, cyclic, ref_id):
@@ -227,7 +228,7 @@ def main(args):
 
                 return [
                     language,
-                    gr.HTML(value=f'<h2 style="text-align: center;">{get_text(language, "title")}</h2>'),
+                    gr.HTML(value=f'<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">{get_text(language, "title")}</h2>'),
                     gr.File(label=get_text(language, "upload_files")),
                     gr.Button(value=get_text(language, "run")),
                     gr.Accordion(label=get_text(language, "optimization_params")),
@@ -253,10 +254,6 @@ def main(args):
                     gr.Checkbox(label=get_text(language, "clean_depth")),
                     gr.Checkbox(label=get_text(language, "transparent_cams")),
                 ]
-
-            # Define UI elements that need text updates
-            title_html = gr.HTML(value='<h2 style="text-align: center;">MASt3R Enhanced UI</h2>')
-            lang_state = gr.State("en")
 
             # Collect all components that need updating
             ui_components = [
@@ -292,13 +289,12 @@ def main(args):
             clean_depth.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
             transparent_cams.change(model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
 
-            # Language switch events
-            lang_btn_en.click(lambda: "en", None, lang_state, queue=False).then(
-                update_ui_text,
-                inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid],
-                outputs=ui_components
-            )
-            lang_btn_zh.click(lambda: "zh", None, lang_state, queue=False).then(
+            # Bind the radio button to the update function
+            def on_lang_change(language_name):
+                lang_code = "zh" if language_name == "中文" else "en"
+                return lang_code
+
+            lang_radio.change(on_lang_change, inputs=lang_radio, outputs=lang_state, queue=False).then(
                 update_ui_text,
                 inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid],
                 outputs=ui_components
