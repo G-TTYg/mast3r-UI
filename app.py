@@ -307,15 +307,15 @@ def main(args):
                 gr.Accordion(label=get_text(language, "visualization_params")),
                 gr.Slider(label=get_text(language, "min_conf_thr"), info=get_text(language, "min_conf_thr_info")),
                 gr.Slider(label=get_text(language, "cam_size"), info=get_text(language, "cam_size_info")),
-                gr.Accordion(label=get_text(language, "config_title")),
-                gr.Radio(label=get_text(language, "device")),
-                gr.Dropdown(label=get_text(language, "model")),
-                gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
                 gr.Slider(label=get_text(language, "tsdf_threshold"), info=get_text(language, "tsdf_threshold_info")),
                 gr.Checkbox(label=get_text(language, "as_pointcloud")),
                 gr.Checkbox(label=get_text(language, "mask_sky")),
                 gr.Checkbox(label=get_text(language, "clean_depth")),
                 gr.Checkbox(label=get_text(language, "transparent_cams")),
+                gr.Accordion(label=get_text(language, "config_title")),
+                gr.Radio(label=get_text(language, "device")),
+                gr.Dropdown(label=get_text(language, "model")),
+                gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
             ]
 
         # Collect all components that need updating
