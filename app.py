@@ -194,11 +194,11 @@ def main(args):
                                         args.retrieval_model, device_r, args.silent, args.image_size)
 
         progress(0.1, desc="Running reconstruction...")
-            scene_state, outmodel = recon_fun(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
-                                              as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
-                                              scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
-            progress(1.0, desc="Done!")
-            return scene_state, outmodel
+        scene_state, outmodel = recon_fun(scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
+                                          as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
+                                          scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics)
+        progress(1.0, desc="Done!")
+        return scene_state, outmodel
 
     # Create a persistent temporary directory for the duration of the app
     with tempfile.TemporaryDirectory(suffix='_mast3r_gradio_persistent_cache') as tmpdirname:
@@ -209,168 +209,168 @@ def main(args):
 
         # Build Gradio UI
         with gr.Blocks(css=".gradio-container {margin: 0 !important; min-width: 100%}", title="MASt3R Enhanced UI") as demo:
-        scene_state = gr.State(None)
-        lang_state = gr.State("en") # Default language
+            scene_state = gr.State(None)
+            lang_state = gr.State("en") # Default language
 
-        with gr.Row():
-            title_html = gr.HTML('<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">MASt3R Enhanced UI</h2>')
-            lang_radio = gr.Radio(["English", "中文"], value="English", label="Language", show_label=False, container=False, scale=0)
-
-        with gr.Accordion("Configuration", open=True) as config_accordion:
             with gr.Row():
-                device = gr.Radio(["cpu", "cuda"], value="cpu" if not torch.cuda.is_available() else "cuda", label="Device")
-                model_name = gr.Dropdown(["MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric", "custom"], label="Model")
-                custom_model_path = gr.Textbox(label="Custom Model Path", placeholder="Enter path to your custom .pth file", visible=False)
+                title_html = gr.HTML('<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">MASt3R Enhanced UI</h2>')
+                lang_radio = gr.Radio(["English", "中文"], value="English", label="Language", show_label=False, container=False, scale=0)
 
-            def toggle_custom_model_path(model_name):
-                return gr.update(visible=model_name == "custom")
+            with gr.Accordion("Configuration", open=True) as config_accordion:
+                with gr.Row():
+                    device = gr.Radio(["cpu", "cuda"], value="cpu" if not torch.cuda.is_available() else "cuda", label="Device")
+                    model_name = gr.Dropdown(["MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric", "custom"], label="Model")
+                    custom_model_path = gr.Textbox(label="Custom Model Path", placeholder="Enter path to your custom .pth file", visible=False)
 
-            model_name.change(toggle_custom_model_path, inputs=model_name, outputs=custom_model_path)
+                def toggle_custom_model_path(model_name):
+                    return gr.update(visible=model_name == "custom")
 
-        with gr.Row():
-            with gr.Column(scale=1):
-                with gr.Group():
-                    inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple")
+                model_name.change(toggle_custom_model_path, inputs=model_name, outputs=custom_model_path)
 
-                with gr.Group():
-                    with gr.Accordion(get_text("en", "optimization_params"), open=True) as opt_params_accordion:
-                        with gr.Row():
-                            lr1 = gr.Slider(label=get_text("en", "coarse_lr"), value=0.07, minimum=0.01, maximum=0.2, step=0.01, info=get_text("en", "coarse_lr_info"))
-                            niter1 = gr.Slider(label=get_text("en", "coarse_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "coarse_iter_info"))
-                        with gr.Row():
-                            lr2 = gr.Slider(label=get_text("en", "fine_lr"), value=0.01, minimum=0.005, maximum=0.05, step=0.001, info=get_text("en", "fine_lr_info"))
-                            niter2 = gr.Slider(label=get_text("en", "fine_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "fine_iter_info"))
-                        optim_level = gr.Dropdown(["coarse", "refine", "refine+depth"], value='refine+depth', label=get_text("en", "optim_level"), info=get_text("en", "optim_level_info"))
-                        matching_conf_thr = gr.Slider(label=get_text("en", "matching_conf_thr"), value=0., minimum=0., maximum=30., step=0.1, info=get_text("en", "matching_conf_thr_info"))
-                        shared_intrinsics = gr.Checkbox(value=False, label=get_text("en", "shared_intrinsics"), info=get_text("en", "shared_intrinsics_info"))
+            with gr.Row():
+                with gr.Column(scale=1):
+                    with gr.Group():
+                        inputfiles = gr.File(label=get_text("en", "upload_files"), file_count="multiple")
 
-                    with gr.Accordion(get_text("en", "scenegraph_params"), open=False) as sg_params_accordion:
-                        scenegraph_type = gr.Dropdown(
-                            [("complete: all possible image pairs", "complete"),
-                             ("swin: sliding window", "swin"),
-                             ("logwin: sliding window with long range", "logwin"),
-                             ("oneref: match one image with all", "oneref")] +
-                            ([("retrieval: connect views based on similarity", "retrieval")] if args.retrieval_model else []),
-                            value='complete', label=get_text("en", "scenegraph_type"),
-                            info=get_text("en", "scenegraph_type_info"), interactive=True)
-                        with gr.Column(visible=False) as graph_opt:
-                            winsize = gr.Slider(label=get_text("en", "scenegraph_window_size"), value=1, minimum=1, maximum=1, step=1)
-                            win_cyclic = gr.Checkbox(value=False, label=get_text("en", "cyclic_sequence"))
-                            refid = gr.Slider(label=get_text("en", "reference_id"), value=0, minimum=0, maximum=0, step=1, visible=False)
+                    with gr.Group():
+                        with gr.Accordion(get_text("en", "optimization_params"), open=True) as opt_params_accordion:
+                            with gr.Row():
+                                lr1 = gr.Slider(label=get_text("en", "coarse_lr"), value=0.07, minimum=0.01, maximum=0.2, step=0.01, info=get_text("en", "coarse_lr_info"))
+                                niter1 = gr.Slider(label=get_text("en", "coarse_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "coarse_iter_info"))
+                            with gr.Row():
+                                lr2 = gr.Slider(label=get_text("en", "fine_lr"), value=0.01, minimum=0.005, maximum=0.05, step=0.001, info=get_text("en", "fine_lr_info"))
+                                niter2 = gr.Slider(label=get_text("en", "fine_iter"), value=300, minimum=0, maximum=1000, step=1, info=get_text("en", "fine_iter_info"))
+                            optim_level = gr.Dropdown(["coarse", "refine", "refine+depth"], value='refine+depth', label=get_text("en", "optim_level"), info=get_text("en", "optim_level_info"))
+                            matching_conf_thr = gr.Slider(label=get_text("en", "matching_conf_thr"), value=0., minimum=0., maximum=30., step=0.1, info=get_text("en", "matching_conf_thr_info"))
+                            shared_intrinsics = gr.Checkbox(value=False, label=get_text("en", "shared_intrinsics"), info=get_text("en", "shared_intrinsics_info"))
 
-                    with gr.Accordion(get_text("en", "visualization_params"), open=False) as viz_params_accordion:
-                        with gr.Row():
-                            min_conf_thr = gr.Slider(label=get_text("en", "min_conf_thr"), value=1.5, minimum=0.0, maximum=10, step=0.1, info=get_text("en", "min_conf_thr_info"))
-                            cam_size = gr.Slider(label=get_text("en", "cam_size"), value=0.2, minimum=0.001, maximum=1.0, step=0.001, info=get_text("en", "cam_size_info"))
-                        TSDF_thresh = gr.Slider(label=get_text("en", "tsdf_threshold"), value=0., minimum=0., maximum=1., step=0.01, info=get_text("en", "tsdf_threshold_info"))
-                        with gr.Row():
-                            as_pointcloud = gr.Checkbox(value=True, label=get_text("en", "as_pointcloud"))
-                            mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
-                            clean_depth = gr.Checkbox(value=True, label=get_text("en", "clean_depth"))
-                            transparent_cams = gr.Checkbox(value=False, label=get_text("en", "transparent_cams"))
+                        with gr.Accordion(get_text("en", "scenegraph_params"), open=False) as sg_params_accordion:
+                            scenegraph_type = gr.Dropdown(
+                                [("complete: all possible image pairs", "complete"),
+                                 ("swin: sliding window", "swin"),
+                                 ("logwin: sliding window with long range", "logwin"),
+                                 ("oneref: match one image with all", "oneref")] +
+                                ([("retrieval: connect views based on similarity", "retrieval")] if args.retrieval_model else []),
+                                value='complete', label=get_text("en", "scenegraph_type"),
+                                info=get_text("en", "scenegraph_type_info"), interactive=True)
+                            with gr.Column(visible=False) as graph_opt:
+                                winsize = gr.Slider(label=get_text("en", "scenegraph_window_size"), value=1, minimum=1, maximum=1, step=1)
+                                win_cyclic = gr.Checkbox(value=False, label=get_text("en", "cyclic_sequence"))
+                                refid = gr.Slider(label=get_text("en", "reference_id"), value=0, minimum=0, maximum=0, step=1, visible=False)
 
-                run_btn = gr.Button(get_text("en", "run"), variant="primary")
+                        with gr.Accordion(get_text("en", "visualization_params"), open=False) as viz_params_accordion:
+                            with gr.Row():
+                                min_conf_thr = gr.Slider(label=get_text("en", "min_conf_thr"), value=1.5, minimum=0.0, maximum=10, step=0.1, info=get_text("en", "min_conf_thr_info"))
+                                cam_size = gr.Slider(label=get_text("en", "cam_size"), value=0.2, minimum=0.001, maximum=1.0, step=0.001, info=get_text("en", "cam_size_info"))
+                            TSDF_thresh = gr.Slider(label=get_text("en", "tsdf_threshold"), value=0., minimum=0., maximum=1., step=0.01, info=get_text("en", "tsdf_threshold_info"))
+                            with gr.Row():
+                                as_pointcloud = gr.Checkbox(value=True, label=get_text("en", "as_pointcloud"))
+                                mask_sky = gr.Checkbox(value=False, label=get_text("en", "mask_sky"))
+                                clean_depth = gr.Checkbox(value=True, label=get_text("en", "clean_depth"))
+                                transparent_cams = gr.Checkbox(value=False, label=get_text("en", "transparent_cams"))
 
-            with gr.Column(scale=2):
-                with gr.Group():
-                    outmodel = gr.Model3D(label="3D Model Output")
+                    run_btn = gr.Button(get_text("en", "run"), variant="primary")
 
-        # Language switching logic
-        def update_ui_text(language, sg_type, in_files, cyclic, ref_id):
-            # Update scene graph options based on language as well
-            graph_opt_up, winsize_up, win_cyclic_up, refid_up = set_scenegraph_options(in_files, cyclic, ref_id, sg_type)
+                with gr.Column(scale=2):
+                    with gr.Group():
+                        outmodel = gr.Model3D(label="3D Model Output")
 
-            # Dynamically get text for dropdown
-            scenegraph_type_choices = [
-                (get_text(language, "sg_complete"), "complete"),
-                (get_text(language, "sg_swin"), "swin"),
-                (get_text(language, "sg_logwin"), "logwin"),
-                (get_text(language, "sg_oneref"), "oneref")
+            # Language switching logic
+            def update_ui_text(language, sg_type, in_files, cyclic, ref_id):
+                # Update scene graph options based on language as well
+                graph_opt_up, winsize_up, win_cyclic_up, refid_up = set_scenegraph_options(in_files, cyclic, ref_id, sg_type)
+
+                # Dynamically get text for dropdown
+                scenegraph_type_choices = [
+                    (get_text(language, "sg_complete"), "complete"),
+                    (get_text(language, "sg_swin"), "swin"),
+                    (get_text(language, "sg_logwin"), "logwin"),
+                    (get_text(language, "sg_oneref"), "oneref")
+                ]
+                if args.retrieval_model:
+                    scenegraph_type_choices.insert(1, (get_text(language, "sg_retrieval"), "retrieval"))
+
+                return [
+                    language,
+                    gr.HTML(value=f'<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">{get_text(language, "title")}</h2>'),
+                    gr.File(label=get_text(language, "upload_files")),
+                    gr.Button(value=get_text(language, "run")),
+                    gr.Accordion(label=get_text(language, "optimization_params")),
+                    gr.Slider(label=get_text(language, "coarse_lr"), info=get_text(language, "coarse_lr_info")),
+                    gr.Slider(label=get_text(language, "coarse_iter"), info=get_text(language, "coarse_iter_info")),
+                    gr.Slider(label=get_text(language, "fine_lr"), info=get_text(language, "fine_lr_info")),
+                    gr.Slider(label=get_text(language, "fine_iter"), info=get_text(language, "fine_iter_info")),
+                    gr.Dropdown(label=get_text(language, "optim_level"), info=get_text(language, "optim_level_info")),
+                    gr.Slider(label=get_text(language, "matching_conf_thr"), info=get_text(language, "matching_conf_thr_info")),
+                    gr.Checkbox(label=get_text(language, "shared_intrinsics"), info=get_text(language, "shared_intrinsics_info")),
+                    gr.Accordion(label=get_text(language, "scenegraph_params")),
+                    gr.Dropdown(choices=scenegraph_type_choices, label=get_text(language, "scenegraph_type"), info=get_text(language, "scenegraph_type_info")),
+                    winsize_up,
+                    gr.Checkbox(label=get_text(language, "cyclic_sequence")),
+                    refid_up,
+                    graph_opt_up,
+                    gr.Accordion(label=get_text(language, "visualization_params")),
+                    gr.Slider(label=get_text(language, "min_conf_thr"), info=get_text(language, "min_conf_thr_info")),
+                    gr.Slider(label=get_text(language, "cam_size"), info=get_text(language, "cam_size_info")),
+                    gr.Slider(label=get_text(language, "tsdf_threshold"), info=get_text(language, "tsdf_threshold_info")),
+                    gr.Checkbox(label=get_text(language, "as_pointcloud")),
+                    gr.Checkbox(label=get_text(language, "mask_sky")),
+                    gr.Checkbox(label=get_text(language, "clean_depth")),
+                    gr.Checkbox(label=get_text(language, "transparent_cams")),
+                    gr.Accordion(label=get_text(language, "config_title")),
+                    gr.Radio(label=get_text(language, "device")),
+                    gr.Dropdown(label=get_text(language, "model")),
+                    gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
+                ]
+
+            # Collect all components that need updating
+            ui_components = [
+                lang_state, title_html, inputfiles, run_btn,
+                opt_params_accordion, lr1, niter1, lr2, niter2, optim_level, matching_conf_thr, shared_intrinsics,
+                sg_params_accordion, scenegraph_type, winsize, win_cyclic, refid, graph_opt,
+                viz_params_accordion, min_conf_thr, cam_size, TSDF_thresh, as_pointcloud, mask_sky, clean_depth, transparent_cams,
+                config_accordion, device, model_name, custom_model_path
             ]
-            if args.retrieval_model:
-                scenegraph_type_choices.insert(1, (get_text(language, "sg_retrieval"), "retrieval"))
 
-            return [
-                language,
-                gr.HTML(value=f'<h2 id="title" style="text-align: left; flex-grow: 1; margin: 0;">{get_text(language, "title")}</h2>'),
-                gr.File(label=get_text(language, "upload_files")),
-                gr.Button(value=get_text(language, "run")),
-                gr.Accordion(label=get_text(language, "optimization_params")),
-                gr.Slider(label=get_text(language, "coarse_lr"), info=get_text(language, "coarse_lr_info")),
-                gr.Slider(label=get_text(language, "coarse_iter"), info=get_text(language, "coarse_iter_info")),
-                gr.Slider(label=get_text(language, "fine_lr"), info=get_text(language, "fine_lr_info")),
-                gr.Slider(label=get_text(language, "fine_iter"), info=get_text(language, "fine_iter_info")),
-                gr.Dropdown(label=get_text(language, "optim_level"), info=get_text(language, "optim_level_info")),
-                gr.Slider(label=get_text(language, "matching_conf_thr"), info=get_text(language, "matching_conf_thr_info")),
-                gr.Checkbox(label=get_text(language, "shared_intrinsics"), info=get_text(language, "shared_intrinsics_info")),
-                gr.Accordion(label=get_text(language, "scenegraph_params")),
-                gr.Dropdown(choices=scenegraph_type_choices, label=get_text(language, "scenegraph_type"), info=get_text(language, "scenegraph_type_info")),
-                winsize_up,
-                gr.Checkbox(label=get_text(language, "cyclic_sequence")),
-                refid_up,
-                graph_opt_up,
-                gr.Accordion(label=get_text(language, "visualization_params")),
-                gr.Slider(label=get_text(language, "min_conf_thr"), info=get_text(language, "min_conf_thr_info")),
-                gr.Slider(label=get_text(language, "cam_size"), info=get_text(language, "cam_size_info")),
-                gr.Slider(label=get_text(language, "tsdf_threshold"), info=get_text(language, "tsdf_threshold_info")),
-                gr.Checkbox(label=get_text(language, "as_pointcloud")),
-                gr.Checkbox(label=get_text(language, "mask_sky")),
-                gr.Checkbox(label=get_text(language, "clean_depth")),
-                gr.Checkbox(label=get_text(language, "transparent_cams")),
-                gr.Accordion(label=get_text(language, "config_title")),
-                gr.Radio(label=get_text(language, "device")),
-                gr.Dropdown(label=get_text(language, "model")),
-                gr.Textbox(label=get_text(language, "custom_model_path"), placeholder=get_text(language, "custom_model_path_placeholder")),
-            ]
+            # Event listeners
+            scenegraph_type.change(set_scenegraph_options,
+                                   inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
+                                   outputs=[graph_opt, winsize, win_cyclic, refid])
+            inputfiles.change(set_scenegraph_options,
+                              inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
+                              outputs=[graph_opt, winsize, win_cyclic, refid])
+            win_cyclic.change(set_scenegraph_options,
+                              inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
+                              outputs=[graph_opt, winsize, win_cyclic, refid])
+            run_btn.click(fn=run_reconstruction,
+                          inputs=[scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
+                                  as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
+                                  scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
+                                  model_name, custom_model_path, device],
+                          outputs=[scene_state, outmodel])
 
-        # Collect all components that need updating
-        ui_components = [
-            lang_state, title_html, inputfiles, run_btn,
-            opt_params_accordion, lr1, niter1, lr2, niter2, optim_level, matching_conf_thr, shared_intrinsics,
-            sg_params_accordion, scenegraph_type, winsize, win_cyclic, refid, graph_opt,
-            viz_params_accordion, min_conf_thr, cam_size, TSDF_thresh, as_pointcloud, mask_sky, clean_depth, transparent_cams,
-            config_accordion, device, model_name, custom_model_path
-        ]
+            # Listen to changes in visualization parameters
+            viz_inputs = [scene_state, min_conf_thr, as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh]
+            min_conf_thr.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            cam_size.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            TSDF_thresh.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            as_pointcloud.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            mask_sky.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            clean_depth.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            transparent_cams.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
 
-        # Event listeners
-        scenegraph_type.change(set_scenegraph_options,
-                               inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
-                               outputs=[graph_opt, winsize, win_cyclic, refid])
-        inputfiles.change(set_scenegraph_options,
-                          inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
-                          outputs=[graph_opt, winsize, win_cyclic, refid])
-        win_cyclic.change(set_scenegraph_options,
-                          inputs=[inputfiles, win_cyclic, refid, scenegraph_type],
-                          outputs=[graph_opt, winsize, win_cyclic, refid])
-        run_btn.click(fn=run_reconstruction,
-                      inputs=[scene_state, inputfiles, optim_level, lr1, niter1, lr2, niter2, min_conf_thr, matching_conf_thr,
-                              as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
-                              scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics,
-                              model_name, custom_model_path, device],
-                      outputs=[scene_state, outmodel])
+            # Bind the radio button to the update function
+            def on_lang_change(language_name):
+                lang_code = "zh" if language_name == "中文" else "en"
+                return lang_code
 
-        # Listen to changes in visualization parameters
-        viz_inputs = [scene_state, min_conf_thr, as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size, TSDF_thresh]
-        min_conf_thr.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-        cam_size.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-        TSDF_thresh.release(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-        as_pointcloud.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-        mask_sky.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-        clean_depth.change(fn=model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
-        transparent_cams.change(model_from_scene_fun, inputs=viz_inputs, outputs=outmodel)
+            lang_radio.change(on_lang_change, inputs=lang_radio, outputs=lang_state, queue=False).then(
+                update_ui_text,
+                inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid],
+                outputs=ui_components
+            )
 
-        # Bind the radio button to the update function
-        def on_lang_change(language_name):
-            lang_code = "zh" if language_name == "中文" else "en"
-            return lang_code
-
-        lang_radio.change(on_lang_change, inputs=lang_radio, outputs=lang_state, queue=False).then(
-            update_ui_text,
-            inputs=[lang_state, scenegraph_type, inputfiles, win_cyclic, refid],
-            outputs=ui_components
-        )
-
-    demo.launch(share=args.share, server_name=server_name, server_port=args.server_port)
+        demo.launch(share=args.share, server_name=server_name, server_port=args.server_port)
 
 
 if __name__ == '__main__':
