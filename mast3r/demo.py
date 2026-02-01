@@ -69,9 +69,9 @@ def get_args_parser():
     return parser
 
 
-def _convert_scene_output_to_glb(outfile, imgs, pts3d, mask, focals, cams2world, cam_size=0.05,
-                                 cam_color=None, as_pointcloud=False,
-                                 transparent_cams=False, silent=False):
+def _convert_scene_output(outdir, export_format, imgs, pts3d, mask, focals, cams2world, cam_size=0.05,
+                          cam_color=None, as_pointcloud=False,
+                          transparent_cams=False, silent=False):
     assert len(pts3d) == len(mask) <= len(imgs) <= len(cams2world) == len(focals)
     pts3d = to_numpy(pts3d)
     imgs = to_numpy(imgs)
@@ -109,6 +109,8 @@ def _convert_scene_output_to_glb(outfile, imgs, pts3d, mask, focals, cams2world,
     rot = np.eye(4)
     rot[:3, :3] = Rotation.from_euler('y', np.deg2rad(180)).as_matrix()
     scene.apply_transform(np.linalg.inv(cams2world[0] @ OPENGL @ rot))
+
+    outfile = os.path.join(outdir, f'scene{export_format}')
     if not silent:
         print('(exporting 3D scene to', outfile, ')')
     scene.export(file_obj=outfile)
@@ -116,14 +118,15 @@ def _convert_scene_output_to_glb(outfile, imgs, pts3d, mask, focals, cams2world,
 
 
 def get_3D_model_from_scene(silent, scene_state, min_conf_thr=2, as_pointcloud=False, mask_sky=False,
-                            clean_depth=False, transparent_cams=False, cam_size=0.05, TSDF_thresh=0):
+                            clean_depth=False, transparent_cams=False, cam_size=0.05, TSDF_thresh=0, export_format=".glb"):
     """
-    extract 3D_model (glb file) from a reconstructed scene
+    extract 3D_model from a reconstructed scene
     """
     if scene_state is None:
         return None
-    outfile = scene_state.outfile_name
-    if outfile is None:
+
+    outdir = scene_state.cache_dir
+    if outdir is None:
         return None
 
     # get optimized values from scene
@@ -139,14 +142,14 @@ def get_3D_model_from_scene(silent, scene_state, min_conf_thr=2, as_pointcloud=F
     else:
         pts3d, _, confs = to_numpy(scene.get_dense_pts3d(clean_depth=clean_depth))
     msk = to_numpy([c > min_conf_thr for c in confs])
-    return _convert_scene_output_to_glb(outfile, rgbimg, pts3d, msk, focals, cams2world, as_pointcloud=as_pointcloud,
-                                        transparent_cams=transparent_cams, cam_size=cam_size, silent=silent)
+    return _convert_scene_output(outdir, export_format, rgbimg, pts3d, msk, focals, cams2world, as_pointcloud=as_pointcloud,
+                                 transparent_cams=transparent_cams, cam_size=cam_size, silent=silent)
 
 
 def get_reconstructed_scene(outdir, gradio_delete_cache, model, retrieval_model, device, silent, image_size,
                             current_scene_state, filelist, optim_level, lr1, niter1, lr2, niter2, min_conf_thr,
                             matching_conf_thr, as_pointcloud, mask_sky, clean_depth, transparent_cams, cam_size,
-                            scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics, **kw):
+                            scenegraph_type, winsize, win_cyclic, refid, TSDF_thresh, shared_intrinsics, export_format=".glb", **kw):
     """
     from a list of images, run mast3r inference, sparse global aligner.
     then run get_3D_model_from_scene
@@ -204,11 +207,11 @@ def get_reconstructed_scene(outdir, gradio_delete_cache, model, retrieval_model,
             current_scene_state.outfile_name is not None:
         outfile_name = current_scene_state.outfile_name
     else:
-        outfile_name = tempfile.mktemp(suffix='_scene.glb', dir=outdir)
+        outfile_name = tempfile.mktemp(suffix=f'_scene{export_format}', dir=outdir)
 
     scene_state = SparseGAState(scene, gradio_delete_cache, cache_dir, outfile_name)
     outfile = get_3D_model_from_scene(silent, scene_state, min_conf_thr, as_pointcloud, mask_sky,
-                                      clean_depth, transparent_cams, cam_size, TSDF_thresh)
+                                      clean_depth, transparent_cams, cam_size, TSDF_thresh, export_format=export_format)
     return scene_state, outfile
 
 
